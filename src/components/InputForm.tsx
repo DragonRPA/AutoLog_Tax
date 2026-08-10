@@ -22,13 +22,14 @@ export const InputForm: React.FC<InputFormProps> = ({
 }) => {
   const [isLoaded, setIsLoaded] = useState(false);
 
-  const [companyName, setCompanyName] = useState('(주)이렌컴');
-  const [bizRegNumber, setBizRegNumber] = useState('206-81-25423');
-  const [vehicleModel, setVehicleModel] = useState('싼타페');
-  const [licensePlate, setLicensePlate] = useState('122소2232');
+  // 최초 사용 시 모든 항목 공백("")으로 초기화
+  const [companyName, setCompanyName] = useState('');
+  const [bizRegNumber, setBizRegNumber] = useState('');
+  const [vehicleModel, setVehicleModel] = useState('');
+  const [licensePlate, setLicensePlate] = useState('');
   const [fuelType, setFuelType] = useState<FuelType>('휘발유');
-  const [deptName, setDeptName] = useState('신규영업팀');
-  const [driverName, setDriverName] = useState('차승후');
+  const [deptName, setDeptName] = useState('');
+  const [driverName, setDriverName] = useState('');
 
   const [startDate, setStartDate] = useState('2026-01-01');
   const [endDate, setEndDate] = useState('2026-12-31');
@@ -67,7 +68,7 @@ export const InputForm: React.FC<InputFormProps> = ({
         if (Array.isArray(parsed.customHolidays)) setCustomHolidays(parsed.customHolidays);
         if (parsed.holidayNames) setHolidayNames(parsed.holidayNames);
       } else {
-        // 저장된 데이터가 없는 경우 2026 기본 공휴일 로딩
+        // 최초 사용자: 2026 기본 공휴일 자동 로딩
         loadStatutoryHolidays(2026);
       }
     } catch (err) {
@@ -136,13 +137,13 @@ export const InputForm: React.FC<InputFormProps> = ({
   const handleResetStorage = () => {
     if (window.confirm('저장된 모든 정보 및 휴가/공휴일 설정을 초기화하시겠습니까?')) {
       localStorage.removeItem(LOCAL_STORAGE_KEY);
-      setCompanyName('(주)이렌컴');
-      setBizRegNumber('206-81-25423');
-      setVehicleModel('싼타페');
-      setLicensePlate('122소2232');
+      setCompanyName('');
+      setBizRegNumber('');
+      setVehicleModel('');
+      setLicensePlate('');
       setFuelType('휘발유');
-      setDeptName('신규영업팀');
-      setDriverName('차승후');
+      setDeptName('');
+      setDriverName('');
       setStartDate('2026-01-01');
       setEndDate('2026-12-31');
       setInitialOdometer('');
@@ -211,6 +212,19 @@ export const InputForm: React.FC<InputFormProps> = ({
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+
+    if (!companyName.trim()) {
+      throw new Error('상호명을 입력해주세요.');
+    }
+    if (!bizRegNumber.trim()) {
+      throw new Error('사업자등록번호를 입력해주세요.');
+    }
+    if (!vehicleModel.trim()) {
+      throw new Error('차종을 입력해주세요.');
+    }
+    if (!licensePlate.trim()) {
+      throw new Error('자동차등록번호를 입력해주세요.');
+    }
 
     const initVal = Number(initialOdometer);
     const finalVal = Number(finalOdometer);
@@ -283,6 +297,7 @@ export const InputForm: React.FC<InputFormProps> = ({
                 type="text"
                 value={companyName}
                 onChange={e => setCompanyName(e.target.value)}
+                placeholder="예: (주)이렌컴"
                 required
                 className="px-3 py-2 text-sm border border-slate-300 dark:border-slate-700 rounded-md bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-sky-500 outline-none"
               />
@@ -296,6 +311,7 @@ export const InputForm: React.FC<InputFormProps> = ({
                 type="text"
                 value={bizRegNumber}
                 onChange={e => setBizRegNumber(e.target.value)}
+                placeholder="예: 206-81-25423"
                 required
                 className="px-3 py-2 text-sm border border-slate-300 dark:border-slate-700 rounded-md bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-sky-500 outline-none"
               />
@@ -309,6 +325,7 @@ export const InputForm: React.FC<InputFormProps> = ({
                 type="text"
                 value={vehicleModel}
                 onChange={e => setVehicleModel(e.target.value)}
+                placeholder="예: 싼타페"
                 required
                 className="px-3 py-2 text-sm border border-slate-300 dark:border-slate-700 rounded-md bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-sky-500 outline-none"
               />
@@ -322,6 +339,7 @@ export const InputForm: React.FC<InputFormProps> = ({
                 type="text"
                 value={licensePlate}
                 onChange={e => setLicensePlate(e.target.value)}
+                placeholder="예: 122소2232"
                 required
                 className="px-3 py-2 text-sm border border-slate-300 dark:border-slate-700 rounded-md bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-sky-500 outline-none"
               />
@@ -353,7 +371,7 @@ export const InputForm: React.FC<InputFormProps> = ({
                 type="text"
                 value={deptName}
                 onChange={e => setDeptName(e.target.value)}
-                required
+                placeholder="예: 영업팀"
                 className="px-3 py-2 text-sm border border-slate-300 dark:border-slate-700 rounded-md bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-sky-500 outline-none"
               />
             </div>
@@ -366,7 +384,7 @@ export const InputForm: React.FC<InputFormProps> = ({
                 type="text"
                 value={driverName}
                 onChange={e => setDriverName(e.target.value)}
-                required
+                placeholder="예: 홍길동"
                 className="px-3 py-2 text-sm border border-slate-300 dark:border-slate-700 rounded-md bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-sky-500 outline-none"
               />
             </div>
