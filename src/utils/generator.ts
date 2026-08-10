@@ -27,6 +27,7 @@ export function generateAutoLogbook(input: LogbookInput): AutoLogResult {
     initialOdometer,
     finalOdometer,
     commuteDistance,
+    targetBusinessRatio = 100,
     vacationDates = [],
     customHolidays = [],
     holidayNames = {}
@@ -73,33 +74,40 @@ export function generateAutoLogbook(input: LogbookInput): AutoLogResult {
 
   const workdayCount = workdays.length;
 
+  // 목표 업무용 사용거리 및 비업무용 사용거리 정밀 산출
+  const clampedRatio = Math.max(0, Math.min(100, targetBusinessRatio));
+  const targetBusinessDistance = Math.round((totalRequiredDistance * clampedRatio) / 100);
+  const targetNonBusinessDistance = totalRequiredDistance - targetBusinessDistance;
+
   // 평일 주행거리 할당 계산
   const dailyCommuteList: Record<string, number> = {};
   const dailyBusinessList: Record<string, number> = {};
+  const dailyNonBusinessList: Record<string, number> = {};
 
   if (workdayCount > 0) {
-    // 1) 기본 출퇴근 총합계 계산
+    // 1) 기본 출퇴근 거리 계산
     let effectiveCommute = Math.max(0, commuteDistance);
     let totalCommuteTarget = effectiveCommute * workdayCount;
 
-    // 출퇴근거리 총합이 요구 주행거리를 초과하는 경우 자동 조정
-    if (totalCommuteTarget > totalRequiredDistance) {
-      effectiveCommute = Math.floor(totalRequiredDistance / workdayCount);
+    // 출퇴근거리 총합이 목표 업무거리를 초과하지 않도록 자동 조정
+    if (totalCommuteTarget > targetBusinessDistance) {
+      effectiveCommute = Math.floor(targetBusinessDistance / workdayCount);
       totalCommuteTarget = effectiveCommute * workdayCount;
     }
 
-    let remainingForBusiness = totalRequiredDistance - totalCommuteTarget;
+    let remainingBusiness = targetBusinessDistance - totalCommuteTarget;
 
-    // 2) 출퇴근거리 할당
+    // 출퇴근거리 할당
     workdays.forEach(d => {
       dailyCommuteList[d] = effectiveCommute;
       dailyBusinessList[d] = 0;
+      dailyNonBusinessList[d] = 0;
     });
 
-    // 3) 남은 일반 업무거리 자연스러운 분배 (가중치 무작위 분배)
-    if (remainingForBusiness > 0) {
+    // 2) 일반 업무용 거리 가중치 무작위 분배
+    if (remainingBusiness > 0) {
       const weights: number[] = workdays.map((d, idx) => {
-        const pseudoRandom = Math.abs(Math.sin((idx + 1) * 997 + remainingForBusiness));
+        const pseudoRandom = Math.abs(Math.sin((idx + 1) * 997 + remainingBusiness));
         return 0.5 + pseudoRandom * 1.5;
       });
 
@@ -108,11 +116,25 @@ export function generateAutoLogbook(input: LogbookInput): AutoLogResult {
 
       workdays.forEach((d, idx) => {
         if (idx === workdayCount - 1) {
-          dailyBusinessList[d] = remainingForBusiness - allocatedSum;
+          dailyBusinessList[d] = remainingBusiness - allocatedSum;
         } else {
-          const share = Math.floor((remainingForBusiness * weights[idx]) / totalWeight);
+          const share = Math.floor((remainingBusiness * weights[idx]) / totalWeight);
           dailyBusinessList[d] = share;
           allocatedSum += share;
+        }
+      });
+    }
+
+    // 3) 비업무용 거리 평일 분배
+    if (targetNonBusinessDistance > 0) {
+      let allocatedNonBizSum = 0;
+      workdays.forEach((d, idx) => {
+        if (idx === workdayCount - 1) {
+          dailyNonBusinessList[d] = targetNonBusinessDistance - allocatedNonBizSum;
+        } else {
+          const share = Math.floor(targetNonBusinessDistance / workdayCount);
+          dailyNonBusinessList[d] = share;
+          allocatedNonBizSum += share;
         }
       });
     }
@@ -128,19 +150,29 @@ export function generateAutoLogbook(input: LogbookInput): AutoLogResult {
 
     let commute = 0;
     let business = 0;
+    let nonBusiness = 0;
     let total = 0;
     let remarks = '';
 
     if (isHoliday) {
       commute = 0;
       business = 0;
+      nonBusiness = 0;
       total = 0;
       remarks = holidayReasons[dateStr] || '휴무';
     } else {
       commute = dailyCommuteList[dateStr] || 0;
       business = dailyBusinessList[dateStr] || 0;
-      total = commute + business;
-      remarks = business > 0 ? '업무 출장 및 방문' : '출퇴근';
+      nonBusiness = dailyNonBusinessList[dateStr] || 0;
+      total = commute + business + nonBusiness;
+
+      if (nonBusiness > 0 && (commute > 0 || business > 0)) {
+        remarks = '업무 및 비업무 병행';
+      } else if (business > 0) {
+        remarks = '업무 출장 및 방문';
+      } else {
+        remarks = '출퇴근';
+      }
     }
 
     const startOdometer = currentOdometer;

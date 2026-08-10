@@ -14,6 +14,7 @@ export interface LogbookInput {
   initialOdometer: number;    // 작성 시작일 계기판 (km)
   finalOdometer: number;      // 작성 종료일 계기판 (km)
   commuteDistance: number;    // 출퇴근용 주행거리 (km)
+  targetBusinessRatio: number;// 목표 업무사용비율 (%, 예: 95 또는 100)
   
   vacationDates: string[];    // 휴가일 목록 (YYYY-MM-DD[])
   customHolidays: string[];   // 명절 및 법정공휴일/임시공휴일 날짜 목록 (YYYY-MM-DD[])
