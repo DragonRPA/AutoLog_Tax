@@ -16,7 +16,6 @@ export async function exportLogbookToExcel(
       pageSetup: { paperSize: 9, orientation: 'portrait' }
     });
 
-    // 기본 그리드선 보이기
     sheet.views = [{ showGridLines: true }];
 
     // 열 너비 지정
@@ -27,10 +26,10 @@ export async function exportLogbookToExcel(
       { key: 'colD', width: 12 }, // 성명
       { key: 'colE', width: 16 }, // 주행전 계기판
       { key: 'colF', width: 16 }, // 주행후 계기판
-      { key: 'colG', width: 14 }, // 주행거리
-      { key: 'colH', width: 14 }, // 출퇴근
-      { key: 'colI', width: 14 }, // 일반업무
-      { key: 'colJ', width: 18 }  // 비고
+      { key: 'colG', width: 14 }, // 주행거리 ⑦
+      { key: 'colH', width: 14 }, // 출퇴근 ⑧
+      { key: 'colI', width: 14 }, // 일반업무 ⑨ (잔여 업무거리)
+      { key: 'colJ', width: 18 }  // 비고 ⑩
     ];
 
     // --- Row 1-4: 상단 과세기간 및 헤더 ---
@@ -219,7 +218,6 @@ export async function exportLogbookToExcel(
 
       row.getCell(10).value = entry.remarks;
 
-      // 정렬 및 스타일
       for (let col = 1; col <= 10; col++) {
         const cell = row.getCell(col);
         cell.font = { name: '맑은 고딕', size: 9 };
@@ -230,8 +228,10 @@ export async function exportLogbookToExcel(
         }
       }
 
-      // 주말 및 휴무일 배경 노란색/연회색 하이라이트
-      if (entry.isHolidayOrWeekend) {
+      if (entry.isSpecialSchedule) {
+        row.getCell(1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'D1FAE5' } };
+        row.getCell(10).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'D1FAE5' } };
+      } else if (entry.isHolidayOrWeekend) {
         row.getCell(1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF2CC' } };
         row.getCell(2).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF2CC' } };
       }
@@ -262,7 +262,10 @@ export async function exportLogbookToExcel(
     sumHeader3.alignment = { vertical: 'middle', horizontal: 'center' };
     sumHeader3.font = { name: '맑은 고딕', size: 9, bold: true };
 
-    // 수식 값 행
+    // [사용자 수식 적용]:
+    // ⑪ 과세기간 총주행거리 = SUM(G14:G{endDataRow}) [Column G: ⑦ 주행거리 합계]
+    // ⑫ 과세기간 업무용 사용거리 = SUM(I14:I{endDataRow}) [Column I: ⑨ 일반 업무용 잔여거리 합계만 계산!]
+    // ⑬ 업무사용비율 = H{summaryValueRow} / E{summaryValueRow} [Cell 12 / Cell 11]
     sheet.mergeCells(`E${summaryValueRow}:G${summaryValueRow}`);
     const sumVal1 = sheet.getCell(`E${summaryValueRow}`);
     sumVal1.value = { formula: `SUM(G${startDataRow}:G${endDataRow})`, result: monthSheet.totalPeriodDistance };
@@ -272,22 +275,20 @@ export async function exportLogbookToExcel(
 
     sheet.mergeCells(`H${summaryValueRow}:I${summaryValueRow}`);
     const sumVal2 = sheet.getCell(`H${summaryValueRow}`);
-    sumVal2.value = { formula: `SUM(H${startDataRow}:I${endDataRow})`, result: monthSheet.totalBusinessDistance };
+    sumVal2.value = { formula: `SUM(I${startDataRow}:I${endDataRow})`, result: monthSheet.totalBusinessDistance };
     sumVal2.alignment = { vertical: 'middle', horizontal: 'right' };
     sumVal2.font = { name: '맑은 고딕', size: 12, bold: true };
     sumVal2.numFmt = '#,##0';
-    // 노란색 하이라이트 (12번 업무용 사용거리)
     sumVal2.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFF00' } };
 
     const sumVal3 = sheet.getCell(`J${summaryValueRow}`);
-    sumVal3.value = { formula: `IF(E${summaryValueRow}>0, H${summaryValueRow}/E${summaryValueRow}, 1)`, result: monthSheet.businessRatio / 100 };
+    sumVal3.value = { formula: `IF(E${summaryValueRow}>0, H${summaryValueRow}/E${summaryValueRow}, 0)`, result: monthSheet.businessRatio / 100 };
     sumVal3.alignment = { vertical: 'middle', horizontal: 'center' };
     sumVal3.font = { name: '맑은 고딕', size: 12, bold: true, color: { argb: '000284C7' } };
     sumVal3.numFmt = '0.0%';
-    // 노란색 하이라이트 (13번 업무사용비율)
     sumVal3.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFF00' } };
 
-    // --- 전체 셀 테두리 설정 ---
+    // 테두리 적용
     const thinBorder: Partial<ExcelJS.Borders> = {
       top: { style: 'thin', color: { argb: 'D9D9D9' } },
       left: { style: 'thin', color: { argb: 'D9D9D9' } },
@@ -295,14 +296,12 @@ export async function exportLogbookToExcel(
       right: { style: 'thin', color: { argb: 'D9D9D9' } }
     };
 
-    // 상단 폼 테두리
     for (let r = 1; r <= 8; r++) {
       for (let c = 1; c <= 10; c++) {
         sheet.getCell(r, c).border = thinBorder;
       }
     }
 
-    // 메인 테이블 테두리
     for (let r = 11; r <= summaryValueRow; r++) {
       for (let c = 1; c <= 10; c++) {
         sheet.getCell(r, c).border = thinBorder;
@@ -310,7 +309,6 @@ export async function exportLogbookToExcel(
     }
   });
 
-  // 엑셀 버퍼 생성
   const buffer = await workbook.xlsx.writeBuffer();
   return new Blob([buffer], {
     type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'

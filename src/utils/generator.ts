@@ -28,7 +28,6 @@ export function generateAutoLogbook(input: LogbookInput): AutoLogResult {
     initialOdometer,
     finalOdometer,
     commuteDistance,
-    targetBusinessRatio = 100,
     minDailyDistance,
     maxDailyDistance,
     specialSchedules = [],
@@ -105,9 +104,7 @@ export function generateAutoLogbook(input: LogbookInput): AutoLogResult {
       ? maxDailyDistance
       : Math.ceil(normalTargetDistance / Math.max(1, normalWorkdayCount) * 2.5);
 
-    // 넓은 범위 난수 생성기 (지수형 파동 및 시드 난수 적용으로 고른 분포 지양)
     const rawWeights: number[] = normalWorkdays.map((dateStr, idx) => {
-      // 넓은 분산을 위해 비선형 함수(지수 + 사인 파동) 결합
       const seed1 = Math.abs(Math.sin((idx + 1) * 31337 + normalTargetDistance));
       const seed2 = Math.abs(Math.cos((idx + 1) * 7919));
       const wideVariance = Math.pow(seed1, 2.5) * 3.5 + seed2 * 0.5;
@@ -119,14 +116,11 @@ export function generateAutoLogbook(input: LogbookInput): AutoLogResult {
 
     normalWorkdays.forEach((dateStr, idx) => {
       if (idx === normalWorkdayCount - 1) {
-        // 마지막 날 단수 차이 보정하여 총 필요거리 100% 일치
         let finalVal = normalTargetDistance - allocatedSum;
         if (finalVal < 0) finalVal = 0;
         dailyTotalList[dateStr] = finalVal;
       } else {
         let calculated = Math.floor((normalTargetDistance * rawWeights[idx]) / totalWeight);
-
-        // 최소/최대 주행거리 제어 적용
         if (userMin > 0) calculated = Math.max(userMin, calculated);
         if (userMax > 0) calculated = Math.min(userMax, calculated);
 
@@ -158,20 +152,20 @@ export function generateAutoLogbook(input: LogbookInput): AutoLogResult {
       total = 0;
       remarks = holidayReasons[dateStr] || '휴무';
     } else if (isSpecial) {
-      // 확정 특수 일정 (장거리 지방 출장 등)
+      // 확정 특수 일정 (장거리 지방 출장 등): 전체가 일반 업무용 거리에 포함
       const spec = specialMap[dateStr];
       commute = 0;
       business = spec.distance;
       total = spec.distance;
       remarks = spec.remarks || '특수 장거리 출장';
     } else {
-      // 일반 평일
+      // 일반 평일: 총 주행거리에서 출퇴근거리를 차감한 잔여거리가 ⑨ 일반 업무용 거리
       total = dailyTotalList[dateStr] || 0;
       const baseCommute = Math.max(0, commuteDistance);
 
       if (total >= baseCommute) {
         commute = baseCommute;
-        business = total - baseCommute;
+        business = total - baseCommute; // ⑨ 잔여 일반 업무용 거리
       } else {
         commute = total;
         business = 0;
@@ -216,14 +210,14 @@ export function generateAutoLogbook(input: LogbookInput): AutoLogResult {
     monthlyMap[sheetKey].push(entry);
   });
 
-  // 누적 과세기간 총계 계산
+  // [사용자 요구사항 반영]:
+  // ⑪ 과세기간 총주행 거리 = sum(⑦ 총 주행거리)
+  // ⑫ 과세기간 업무용 사용거리 = sum(⑨ 잔여 일반 업무용 거리) [출퇴근 거리 ⑧ 차감 후 잔여 거리]
+  // ⑬ 업무사용비율 = (⑫ / ⑪) * 100%
   const overallTotalDistance = entries.reduce((sum, e) => sum + e.totalDistance, 0);
-  const overallBusinessDistance = entries.reduce(
-    (sum, e) => sum + e.commuteDistance + e.businessDistance,
-    0
-  );
+  const overallBusinessDistance = entries.reduce((sum, e) => sum + e.businessDistance, 0); // ⑨ 일반 업무용만 합산!
   const overallBusinessRatio =
-    overallTotalDistance > 0 ? (overallBusinessDistance / overallTotalDistance) * 100 : 100.0;
+    overallTotalDistance > 0 ? (overallBusinessDistance / overallTotalDistance) * 100 : 0.0;
 
   const monthlySheets: MonthlySheetData[] = Object.entries(monthlyMap).map(
     ([sheetName, monthEntries]) => {
@@ -232,14 +226,11 @@ export function generateAutoLogbook(input: LogbookInput): AutoLogResult {
       const month = getMonth(dateObj) + 1;
 
       const totalPeriodDistance = monthEntries.reduce((sum, e) => sum + e.totalDistance, 0);
-      const totalBusinessDistance = monthEntries.reduce(
-        (sum, e) => sum + e.commuteDistance + e.businessDistance,
-        0
-      );
+      const totalBusinessDistance = monthEntries.reduce((sum, e) => sum + e.businessDistance, 0); // ⑨ 일반 업무용만 합산!
       const businessRatio =
         totalPeriodDistance > 0
           ? (totalBusinessDistance / totalPeriodDistance) * 100
-          : 100.0;
+          : 0.0;
 
       return {
         sheetName,
