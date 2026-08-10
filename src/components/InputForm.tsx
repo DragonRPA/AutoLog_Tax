@@ -28,14 +28,16 @@ export const InputForm: React.FC<InputFormProps> = ({
 
   const [startDate, setStartDate] = useState('2026-01-01');
   const [endDate, setEndDate] = useState('2026-12-31');
-  const [initialOdometer, setInitialOdometer] = useState<number>(37288);
-  const [finalOdometer, setFinalOdometer] = useState<number>(45800);
-  const [commuteDistance, setCommuteDistance] = useState<number>(40);
+
+  // 계기판 및 출퇴근거리 초기값을 공백("")으로 지정
+  const [initialOdometer, setInitialOdometer] = useState<string>('');
+  const [finalOdometer, setFinalOdometer] = useState<string>('');
+  const [commuteDistance, setCommuteDistance] = useState<string>('');
   const [targetBusinessRatio, setTargetBusinessRatio] = useState<number>(95);
 
-  // 휴가일 관리
+  // 휴가일 초기값을 공백 목록([])으로 지정
   const [vacationInput, setVacationInput] = useState('');
-  const [vacationDates, setVacationDates] = useState<string[]>(['2026-07-27', '2026-07-28']);
+  const [vacationDates, setVacationDates] = useState<string[]>([]);
 
   // 공휴일 및 공휴일 명칭 관리
   const [holidayInput, setHolidayInput] = useState('');
@@ -43,8 +45,10 @@ export const InputForm: React.FC<InputFormProps> = ({
   const [customHolidays, setCustomHolidays] = useState<string[]>([]);
   const [holidayNames, setHolidayNames] = useState<Record<string, string>>({});
 
-  // 실시간 예상 시뮬레이션 계산
-  const totalEstimatedDistance = Math.max(0, finalOdometer - initialOdometer);
+  // 실시간 예상 시뮬레이션 계산 (공백 입력 대응)
+  const initNum = Number(initialOdometer) || 0;
+  const finalNum = Number(finalOdometer) || 0;
+  const totalEstimatedDistance = finalNum > initNum ? finalNum - initNum : 0;
   const estimatedBusinessDistance = Math.round((totalEstimatedDistance * targetBusinessRatio) / 100);
   const estimatedNonBusinessDistance = totalEstimatedDistance - estimatedBusinessDistance;
 
@@ -126,6 +130,19 @@ export const InputForm: React.FC<InputFormProps> = ({
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+
+    const initVal = Number(initialOdometer);
+    const finalVal = Number(finalOdometer);
+    const commuteVal = Number(commuteDistance) || 0;
+
+    if (!initialOdometer || isNaN(initVal)) {
+      throw new Error('시작 계기판 거리를 입력해주세요.');
+    }
+
+    if (!finalOdometer || isNaN(finalVal)) {
+      throw new Error('종료 계기판 거리를 입력해주세요.');
+    }
+
     onGenerate({
       companyName,
       bizRegNumber,
@@ -136,9 +153,9 @@ export const InputForm: React.FC<InputFormProps> = ({
       driverName,
       startDate,
       endDate,
-      initialOdometer,
-      finalOdometer,
-      commuteDistance,
+      initialOdometer: initVal,
+      finalOdometer: finalVal,
+      commuteDistance: commuteVal,
       targetBusinessRatio,
       vacationDates,
       customHolidays,
@@ -299,12 +316,13 @@ export const InputForm: React.FC<InputFormProps> = ({
 
             <div className="flex flex-col gap-1">
               <label className="text-xs font-semibold text-slate-600 dark:text-slate-400 whitespace-nowrap flex-shrink-0">
-                시작 계기판 (km)
+                시작 계기판 거리 (km)
               </label>
               <input
                 type="number"
                 value={initialOdometer}
-                onChange={e => setInitialOdometer(Number(e.target.value))}
+                onChange={e => setInitialOdometer(e.target.value)}
+                placeholder="예: 37288"
                 required
                 min={0}
                 className="px-3 py-2 text-sm border border-slate-300 dark:border-slate-700 rounded-md bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-sky-500 outline-none text-right font-mono"
@@ -313,26 +331,28 @@ export const InputForm: React.FC<InputFormProps> = ({
 
             <div className="flex flex-col gap-1">
               <label className="text-xs font-semibold text-slate-600 dark:text-slate-400 whitespace-nowrap flex-shrink-0">
-                종료 계기판 (km)
+                종료 계기판 거리 (km)
               </label>
               <input
                 type="number"
                 value={finalOdometer}
-                onChange={e => setFinalOdometer(Number(e.target.value))}
+                onChange={e => setFinalOdometer(e.target.value)}
+                placeholder="예: 45800"
                 required
-                min={initialOdometer}
+                min={initNum}
                 className="px-3 py-2 text-sm border border-slate-300 dark:border-slate-700 rounded-md bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-sky-500 outline-none text-right font-mono"
               />
             </div>
 
             <div className="flex flex-col gap-1">
               <label className="text-xs font-semibold text-slate-600 dark:text-slate-400 whitespace-nowrap flex-shrink-0">
-                출퇴근 거리 (km/일)
+                출퇴근용 주행거리 (km/일)
               </label>
               <input
                 type="number"
                 value={commuteDistance}
-                onChange={e => setCommuteDistance(Number(e.target.value))}
+                onChange={e => setCommuteDistance(e.target.value)}
+                placeholder="예: 40"
                 required
                 min={0}
                 className="px-3 py-2 text-sm border border-slate-300 dark:border-slate-700 rounded-md bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-sky-500 outline-none text-right font-mono"
@@ -388,15 +408,21 @@ export const InputForm: React.FC<InputFormProps> = ({
             <div className="flex items-center gap-6 font-mono whitespace-nowrap">
               <div>
                 <span className="text-slate-500">⑪총 주행거리:</span>{' '}
-                <strong className="text-slate-900 dark:text-slate-100">{totalEstimatedDistance.toLocaleString()} km</strong>
+                <strong className="text-slate-900 dark:text-slate-100">
+                  {totalEstimatedDistance > 0 ? `${totalEstimatedDistance.toLocaleString()} km` : '- km'}
+                </strong>
               </div>
               <div>
                 <span className="text-amber-600 dark:text-amber-400 font-semibold">⑫예상 업무용 사용거리:</span>{' '}
-                <strong className="text-amber-700 dark:text-amber-300">{estimatedBusinessDistance.toLocaleString()} km</strong>
+                <strong className="text-amber-700 dark:text-amber-300">
+                  {estimatedBusinessDistance > 0 ? `${estimatedBusinessDistance.toLocaleString()} km` : '- km'}
+                </strong>
               </div>
               <div>
                 <span className="text-slate-500">예상 비업무 거리:</span>{' '}
-                <span className="text-slate-700 dark:text-slate-300">{estimatedNonBusinessDistance.toLocaleString()} km</span>
+                <span className="text-slate-700 dark:text-slate-300">
+                  {estimatedNonBusinessDistance > 0 ? `${estimatedNonBusinessDistance.toLocaleString()} km` : '0 km'}
+                </span>
               </div>
               <div className="bg-yellow-200 dark:bg-yellow-900/60 px-2 py-0.5 rounded border border-yellow-300 dark:border-yellow-700 text-slate-900 dark:text-yellow-100 font-bold">
                 ⑬목표 비율: {targetBusinessRatio.toFixed(1)}%
@@ -414,6 +440,7 @@ export const InputForm: React.FC<InputFormProps> = ({
           </h3>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            {/* 개인 휴가일 관리 */}
             <div className="flex flex-col gap-2">
               <label className="text-xs font-semibold text-slate-600 dark:text-slate-400 whitespace-nowrap flex-shrink-0">
                 개인 휴가일 추가
@@ -458,6 +485,7 @@ export const InputForm: React.FC<InputFormProps> = ({
               </div>
             </div>
 
+            {/* 명절 및 법정공휴일/임시공휴일 관리 */}
             <div className="flex flex-col gap-2">
               <div className="flex items-center justify-between">
                 <label className="text-xs font-semibold text-slate-600 dark:text-slate-400 whitespace-nowrap flex-shrink-0">
