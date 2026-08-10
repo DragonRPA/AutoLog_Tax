@@ -6,7 +6,7 @@ export interface HolidayInfo {
 }
 
 // 2024년 ~ 2030년 한국 법정 공휴일 (명절/추석/설날 포함) 사전 계산 맵
-const KOREAN_HOLIDAYS_MAP: Record<string, string> = {
+export const KOREAN_HOLIDAYS_MAP: Record<string, string> = {
   // 2024
   '2024-01-01': '신정',
   '2024-02-09': '설날 연휴',
@@ -100,7 +100,6 @@ export function getStatutoryHolidaysForYear(year: number): HolidayInfo[] {
     }
   });
 
-  // 매년 고정 음력 외 양력 공휴일 백업 처리 (만약 맵에 없는 연도인 경우)
   if (holidays.length === 0) {
     const fixed = [
       { m: '01', d: '01', name: '신정' },
@@ -132,10 +131,18 @@ export function getDayOfWeekName(dateStr: string): string {
   return days[getDay(date)];
 }
 
+export function getHolidayName(dateStr: string, customNames?: Record<string, string>): string | null {
+  if (customNames && customNames[dateStr]) {
+    return customNames[dateStr];
+  }
+  return KOREAN_HOLIDAYS_MAP[dateStr] || null;
+}
+
 export function getHolidayReason(
   dateStr: string,
   vacationDates: string[],
-  customHolidays: string[]
+  customHolidays: string[],
+  holidayNames?: Record<string, string>
 ): string | null {
   if (isWeekend(dateStr)) {
     const day = getDay(parseISO(dateStr));
@@ -146,8 +153,12 @@ export function getHolidayReason(
     return '휴가';
   }
 
+  if (holidayNames && holidayNames[dateStr]) {
+    return holidayNames[dateStr];
+  }
+
   if (customHolidays.includes(dateStr)) {
-    return KOREAN_HOLIDAYS_MAP[dateStr] || '공휴일/휴무일';
+    return KOREAN_HOLIDAYS_MAP[dateStr] || '임시공휴일';
   }
 
   if (KOREAN_HOLIDAYS_MAP[dateStr]) {

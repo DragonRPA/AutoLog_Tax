@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { FuelType, LogbookInput } from '@/types/logbook';
-import { getStatutoryHolidaysForYear } from '@/utils/holidays';
+import { getStatutoryHolidaysForYear, KOREAN_HOLIDAYS_MAP } from '@/utils/holidays';
 import { Calendar, Plus, Trash2, RefreshCw, FileText, Download } from 'lucide-react';
 
 interface InputFormProps {
@@ -32,25 +32,37 @@ export const InputForm: React.FC<InputFormProps> = ({
   const [finalOdometer, setFinalOdometer] = useState<number>(45800);
   const [commuteDistance, setCommuteDistance] = useState<number>(40);
 
-  // 휴가일 및 공휴일 관리
+  // 휴가일 관리
   const [vacationInput, setVacationInput] = useState('');
   const [vacationDates, setVacationDates] = useState<string[]>(['2026-07-27', '2026-07-28']);
 
+  // 공휴일 및 공휴일 명칭 관리
   const [holidayInput, setHolidayInput] = useState('');
   const [holidayNameInput, setHolidayNameInput] = useState('');
   const [customHolidays, setCustomHolidays] = useState<string[]>([]);
+  const [holidayNames, setHolidayNames] = useState<Record<string, string>>({});
 
-  // 시작일 연도 변경 시 한국 공휴일 자동 불러오기
+  // 시작일 연도 변경 시 한국 법정공휴일 자동 불러오기
   useEffect(() => {
     if (startDate) {
       const year = new Date(startDate).getFullYear();
       if (!isNaN(year)) {
-        const statutory = getStatutoryHolidaysForYear(year);
-        const dates = statutory.map(h => h.date);
-        setCustomHolidays(prev => Array.from(new Set([...prev, ...dates])));
+        loadStatutoryHolidays(year);
       }
     }
   }, [startDate]);
+
+  const loadStatutoryHolidays = (year: number) => {
+    const statutory = getStatutoryHolidaysForYear(year);
+    const newDates = statutory.map(h => h.date);
+    const newNamesMap: Record<string, string> = { ...holidayNames };
+    statutory.forEach(h => {
+      newNamesMap[h.date] = h.name;
+    });
+
+    setCustomHolidays(prev => Array.from(new Set([...prev, ...newDates])).sort());
+    setHolidayNames(newNamesMap);
+  };
 
   const handleAddVacation = () => {
     if (vacationInput && !vacationDates.includes(vacationInput)) {
@@ -63,23 +75,48 @@ export const InputForm: React.FC<InputFormProps> = ({
     setVacationDates(vacationDates.filter(d => d !== dateToRemove));
   };
 
-  const handleAddHoliday = () => {
-    if (holidayInput && !customHolidays.includes(holidayInput)) {
-      setCustomHolidays([...customHolidays, holidayInput].sort());
-      setHolidayInput('');
-      setHolidayNameInput('');
+  // 날짜 선택 시 알려진 한국 공휴일명이 있으면 공휴일명 입력란 자동 채우기
+  const handleDateInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const val = e.target.value;
+    setHolidayInput(val);
+    if (val && KOREAN_HOLIDAYS_MAP[val]) {
+      setHolidayNameInput(KOREAN_HOLIDAYS_MAP[val]);
+    } else if (val && !holidayNameInput) {
+      setHolidayNameInput('임시공휴일');
     }
+  };
+
+  const handleAddHoliday = () => {
+    if (!holidayInput) return;
+
+    const date = holidayInput;
+    const name = holidayNameInput.trim() || KOREAN_HOLIDAYS_MAP[date] || '임시공휴일';
+
+    if (!customHolidays.includes(date)) {
+      setCustomHolidays([...customHolidays, date].sort());
+    }
+
+    setHolidayNames(prev => ({
+      ...prev,
+      [date]: name
+    }));
+
+    setHolidayInput('');
+    setHolidayNameInput('');
   };
 
   const handleRemoveHoliday = (dateToRemove: string) => {
     setCustomHolidays(customHolidays.filter(d => d !== dateToRemove));
+    setHolidayNames(prev => {
+      const next = { ...prev };
+      delete next[dateToRemove];
+      return next;
+    });
   };
 
   const handleLoadDefaultHolidays = () => {
     const year = startDate ? new Date(startDate).getFullYear() : 2026;
-    const statutory = getStatutoryHolidaysForYear(year);
-    const dates = statutory.map(h => h.date);
-    setCustomHolidays(Array.from(new Set([...dates])));
+    loadStatutoryHolidays(year);
   };
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -98,7 +135,8 @@ export const InputForm: React.FC<InputFormProps> = ({
       finalOdometer,
       commuteDistance,
       vacationDates,
-      customHolidays
+      customHolidays,
+      holidayNames
     });
   };
 
@@ -121,7 +159,6 @@ export const InputForm: React.FC<InputFormProps> = ({
             1. 사업자 및 차량 기본 정보
           </h3>
           <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-            {/* 상하 세로 스택 레이아웃 표준 (flex flex-col gap-1) */}
             <div className="flex flex-col gap-1">
               <label className="text-xs font-semibold text-slate-600 dark:text-slate-400 whitespace-nowrap flex-shrink-0">
                 상호명
@@ -325,7 +362,7 @@ export const InputForm: React.FC<InputFormProps> = ({
                   className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-white text-xs font-medium rounded-md flex items-center gap-1 whitespace-nowrap"
                 >
                   <Plus className="w-4 h-4" />
-                  <span>추가</span>
+                  <span>휴가 추가</span>
                 </button>
               </div>
 
@@ -356,7 +393,7 @@ export const InputForm: React.FC<InputFormProps> = ({
             <div className="flex flex-col gap-2">
               <div className="flex items-center justify-between">
                 <label className="text-xs font-semibold text-slate-600 dark:text-slate-400 whitespace-nowrap flex-shrink-0">
-                  명절 및 법정공휴일/임시공휴일
+                  명절 및 법정공휴일 / 임시공휴일 추가
                 </label>
                 <button
                   type="button"
@@ -368,42 +405,56 @@ export const InputForm: React.FC<InputFormProps> = ({
                 </button>
               </div>
 
+              {/* 날짜 + 공휴일명 입력 및 추가 버튼 */}
               <div className="flex items-center gap-2">
                 <input
                   type="date"
                   value={holidayInput}
-                  onChange={e => setHolidayInput(e.target.value)}
+                  onChange={handleDateInputChange}
+                  className="px-3 py-1.5 text-sm border border-slate-300 dark:border-slate-700 rounded-md bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 outline-none w-36"
+                />
+                <input
+                  type="text"
+                  placeholder="공휴일명 (예: 임시공휴일)"
+                  value={holidayNameInput}
+                  onChange={e => setHolidayNameInput(e.target.value)}
                   className="px-3 py-1.5 text-sm border border-slate-300 dark:border-slate-700 rounded-md bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 flex-1 outline-none"
                 />
                 <button
                   type="button"
                   onClick={handleAddHoliday}
-                  className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-white text-xs font-medium rounded-md flex items-center gap-1 whitespace-nowrap"
+                  className="px-3 py-1.5 bg-rose-600 hover:bg-rose-700 text-white text-xs font-semibold rounded-md flex items-center gap-1 whitespace-nowrap shadow-sm"
                 >
                   <Plus className="w-4 h-4" />
-                  <span>추가</span>
+                  <span>공휴일 추가</span>
                 </button>
               </div>
 
-              <div className="flex flex-wrap gap-1.5 max-h-[120px] overflow-y-auto p-2 bg-slate-50 dark:bg-slate-800/50 rounded-md border border-slate-200 dark:border-slate-700">
+              {/* 공휴일 목록 표시 (무슨 날인지 명칭 병행 노출) */}
+              <div className="flex flex-wrap gap-1.5 max-h-[140px] overflow-y-auto p-2 bg-slate-50 dark:bg-slate-800/50 rounded-md border border-slate-200 dark:border-slate-700">
                 {customHolidays.length === 0 ? (
                   <span className="text-xs text-slate-400 self-center">지정된 공휴일이 없습니다.</span>
                 ) : (
-                  customHolidays.map(date => (
-                    <span
-                      key={date}
-                      className="inline-flex items-center gap-1 px-2 py-0.5 bg-rose-100 dark:bg-rose-950/60 text-rose-900 dark:text-rose-300 border border-rose-200 dark:border-rose-800 rounded-md text-xs font-mono whitespace-nowrap"
-                    >
-                      {date}
-                      <button
-                        type="button"
-                        onClick={() => handleRemoveHoliday(date)}
-                        className="hover:text-rose-600 ml-1"
+                  customHolidays.map(date => {
+                    const hName = holidayNames[date] || KOREAN_HOLIDAYS_MAP[date] || '공휴일';
+                    return (
+                      <span
+                        key={date}
+                        className="inline-flex items-center gap-1 px-2.5 py-1 bg-rose-100 dark:bg-rose-950/60 text-rose-900 dark:text-rose-300 border border-rose-200 dark:border-rose-800 rounded-md text-xs font-mono whitespace-nowrap"
                       >
-                        <Trash2 className="w-3 h-3" />
-                      </button>
-                    </span>
-                  ))
+                        <span className="font-semibold">{date}</span>
+                        <span className="text-[11px] text-rose-700 dark:text-rose-400 font-sans">({hName})</span>
+                        <button
+                          type="button"
+                          onClick={() => handleRemoveHoliday(date)}
+                          className="hover:text-rose-600 ml-1"
+                          title="삭제"
+                        >
+                          <Trash2 className="w-3 h-3" />
+                        </button>
+                      </span>
+                    );
+                  })
                 )}
               </div>
             </div>

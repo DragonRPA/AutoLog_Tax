@@ -28,7 +28,8 @@ export function generateAutoLogbook(input: LogbookInput): AutoLogResult {
     finalOdometer,
     commuteDistance,
     vacationDates = [],
-    customHolidays = []
+    customHolidays = [],
+    holidayNames = {}
   } = input;
 
   if (!startDate || !endDate) {
@@ -62,7 +63,7 @@ export function generateAutoLogbook(input: LogbookInput): AutoLogResult {
   const holidayReasons: Record<string, string> = {};
 
   allDateStrs.forEach(dateStr => {
-    const reason = getHolidayReason(dateStr, vacationDates, customHolidays);
+    const reason = getHolidayReason(dateStr, vacationDates, customHolidays, holidayNames);
     if (reason) {
       holidayReasons[dateStr] = reason;
     } else {
@@ -97,9 +98,7 @@ export function generateAutoLogbook(input: LogbookInput): AutoLogResult {
 
     // 3) 남은 일반 업무거리 자연스러운 분배 (가중치 무작위 분배)
     if (remainingForBusiness > 0) {
-      // 일별 가중치 할당 (자연스러운 렌탈/업무 운행 패턴)
       const weights: number[] = workdays.map((d, idx) => {
-        // 주중 중 수/목/금 가중치 약간 높게, 무작위 요소 가미
         const pseudoRandom = Math.abs(Math.sin((idx + 1) * 997 + remainingForBusiness));
         return 0.5 + pseudoRandom * 1.5;
       });
@@ -109,7 +108,6 @@ export function generateAutoLogbook(input: LogbookInput): AutoLogResult {
 
       workdays.forEach((d, idx) => {
         if (idx === workdayCount - 1) {
-          // 마지막 평일은 단수 차이 보정하여 정확히 맞춤
           dailyBusinessList[d] = remainingForBusiness - allocatedSum;
         } else {
           const share = Math.floor((remainingForBusiness * weights[idx]) / totalWeight);

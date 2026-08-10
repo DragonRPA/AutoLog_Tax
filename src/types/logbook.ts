@@ -16,7 +16,8 @@ export interface LogbookInput {
   commuteDistance: number;    // 출퇴근용 주행거리 (km)
   
   vacationDates: string[];    // 휴가일 목록 (YYYY-MM-DD[])
-  customHolidays: string[];   // 명절 및 법정공휴일/임시공휴일 목록 (YYYY-MM-DD[])
+  customHolidays: string[];   // 명절 및 법정공휴일/임시공휴일 날짜 목록 (YYYY-MM-DD[])
+  holidayNames?: Record<string, string>; // 공휴일 명칭 맵 { '2026-01-01': '신정', '2026-10-02': '임시공휴일' }
 }
 
 export interface DailyLogEntry {
