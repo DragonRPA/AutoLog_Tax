@@ -1,5 +1,11 @@
 export type FuelType = '휘발유' | '경유' | 'LPG' | '전기' | '하이브리드' | '수소';
 
+export interface SpecialScheduleItem {
+  date: string;       // YYYY-MM-DD
+  distance: number;   // 주행거리 (km), e.g. 380
+  remarks: string;    // 비고/출장 목적 (예: "부산 지사 출장")
+}
+
 export interface LogbookInput {
   companyName: string;        // 상호명 (예: (주)이렌컴)
   bizRegNumber: string;       // 사업자등록번호 (예: 206-81-25423)
@@ -14,7 +20,11 @@ export interface LogbookInput {
   initialOdometer: number;    // 작성 시작일 계기판 (km)
   finalOdometer: number;      // 작성 종료일 계기판 (km)
   commuteDistance: number;    // 출퇴근용 주행거리 (km)
-  targetBusinessRatio: number;// 목표 업무사용비율 (%, 예: 95 또는 100)
+  targetBusinessRatio?: number;// 목표 업무사용비율 (%, 기본 100)
+  
+  minDailyDistance?: number;  // 최소 당일 주행거리 (km/일)
+  maxDailyDistance?: number;  // 최대 당일 주행거리 (km/일)
+  specialSchedules: SpecialScheduleItem[]; // 특수 장거리 출장 일정 목록
   
   vacationDates: string[];    // 휴가일 목록 (YYYY-MM-DD[])
   customHolidays: string[];   // 명절 및 법정공휴일/임시공휴일 날짜 목록 (YYYY-MM-DD[])
@@ -34,6 +44,7 @@ export interface DailyLogEntry {
   remarks: string;            // 비고 ⑩
   isHolidayOrWeekend: boolean;// 휴무일/주말 여부
   holidayReason?: string;     // 휴무 사유 (주말, 휴가, 설날 등)
+  isSpecialSchedule?: boolean;// 특수 출장 일정 여부
 }
 
 export interface MonthlySheetData {

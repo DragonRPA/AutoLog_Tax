@@ -87,9 +87,19 @@ export const LogTable: React.FC<LogTableProps> = ({ input, result, currentSheet 
       </div>
 
       {/* 2. 업무용 사용비율 계산 데이터 테이블 */}
-      <div className="mb-2">
-        <div className="text-xs font-bold text-slate-800 dark:text-slate-200 mb-2 whitespace-nowrap">
+      <div className="mb-2 flex items-center justify-between">
+        <div className="text-xs font-bold text-slate-800 dark:text-slate-200 whitespace-nowrap">
           2. 업무용 사용비율 계산 ({currentSheet.sheetName})
+        </div>
+        <div className="text-[11px] text-slate-500 flex items-center gap-3 whitespace-nowrap">
+          <span className="flex items-center gap-1">
+            <span className="w-2.5 h-2.5 rounded bg-emerald-200 dark:bg-emerald-800 border border-emerald-400"></span>
+            <span>특수 출장 일정</span>
+          </span>
+          <span className="flex items-center gap-1">
+            <span className="w-2.5 h-2.5 rounded bg-amber-200 dark:bg-amber-800 border border-amber-400"></span>
+            <span>휴무/공휴일</span>
+          </span>
         </div>
       </div>
 
@@ -131,11 +141,13 @@ export const LogTable: React.FC<LogTableProps> = ({ input, result, currentSheet 
             </tr>
           </thead>
           <tbody>
-            {currentSheet.entries.map((entry, idx) => (
+            {currentSheet.entries.map(entry => (
               <tr
                 key={entry.date}
                 className={`hover:bg-sky-50/50 dark:hover:bg-sky-950/20 transition-colors ${
-                  entry.isHolidayOrWeekend
+                  entry.isSpecialSchedule
+                    ? 'bg-emerald-50/70 dark:bg-emerald-950/40 text-emerald-950 dark:text-emerald-100 font-semibold'
+                    : entry.isHolidayOrWeekend
                     ? 'bg-amber-50/40 dark:bg-amber-950/20 text-slate-500'
                     : 'bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100'
                 }`}
@@ -165,7 +177,13 @@ export const LogTable: React.FC<LogTableProps> = ({ input, result, currentSheet 
                   {entry.businessDistance > 0 ? entry.businessDistance.toLocaleString() : '-'}
                 </td>
                 <td className="border border-slate-200 dark:border-slate-800 p-2 text-center whitespace-nowrap">
-                  {entry.remarks}
+                  {entry.isSpecialSchedule ? (
+                    <span className="inline-flex items-center px-2 py-0.5 bg-emerald-200/80 dark:bg-emerald-900/60 text-emerald-900 dark:text-emerald-200 rounded text-[11px] font-bold">
+                      {entry.remarks}
+                    </span>
+                  ) : (
+                    entry.remarks
+                  )}
                 </td>
               </tr>
             ))}

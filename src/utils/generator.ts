@@ -9,7 +9,8 @@ import {
   LogbookInput,
   DailyLogEntry,
   MonthlySheetData,
-  AutoLogResult
+  AutoLogResult,
+  SpecialScheduleItem
 } from '@/types/logbook';
 import { getDayOfWeekName, getHolidayReason } from './holidays';
 
@@ -28,6 +29,9 @@ export function generateAutoLogbook(input: LogbookInput): AutoLogResult {
     finalOdometer,
     commuteDistance,
     targetBusinessRatio = 100,
+    minDailyDistance,
+    maxDailyDistance,
+    specialSchedules = [],
     vacationDates = [],
     customHolidays = [],
     holidayNames = {}
@@ -50,6 +54,23 @@ export function generateAutoLogbook(input: LogbookInput): AutoLogResult {
 
   const totalRequiredDistance = finalOdometer - initialOdometer;
 
+  // 특수 일정 맵 생성 (날짜 -> { distance, remarks })
+  const specialMap: Record<string, SpecialScheduleItem> = {};
+  let totalSpecialDistance = 0;
+
+  specialSchedules.forEach(item => {
+    if (item.date && item.distance > 0) {
+      specialMap[item.date] = item;
+      totalSpecialDistance += item.distance;
+    }
+  });
+
+  if (totalSpecialDistance > totalRequiredDistance) {
+    throw new Error(
+      `특수 일정 주행거리 합계(${totalSpecialDistance.toLocaleString()}km)가 총 필요 주행거리(${totalRequiredDistance.toLocaleString()}km)를 초과합니다.`
+    );
+  }
+
   // 과세기간 표기 산출 (작성 시작일 속한 연도 1년)
   const startYear = getYear(startParsed);
   const taxPeriodStart = `${startYear}-01-01`;
@@ -59,85 +80,62 @@ export function generateAutoLogbook(input: LogbookInput): AutoLogResult {
   const allDays = eachDayOfInterval({ start: startParsed, end: endParsed });
   const allDateStrs = allDays.map(d => format(d, 'yyyy-MM-dd'));
 
-  // 평일(운행 가능일) 목록 구하기
-  const workdays: string[] = [];
+  // 날짜 구획 분류 (휴무일 / 특수일정 / 일반평일)
+  const normalWorkdays: string[] = [];
   const holidayReasons: Record<string, string> = {};
 
   allDateStrs.forEach(dateStr => {
     const reason = getHolidayReason(dateStr, vacationDates, customHolidays, holidayNames);
     if (reason) {
       holidayReasons[dateStr] = reason;
-    } else {
-      workdays.push(dateStr);
+    } else if (!specialMap[dateStr]) {
+      normalWorkdays.push(dateStr);
     }
   });
 
-  const workdayCount = workdays.length;
+  const normalWorkdayCount = normalWorkdays.length;
+  const normalTargetDistance = totalRequiredDistance - totalSpecialDistance;
 
-  // 목표 업무용 사용거리 및 비업무용 사용거리 정밀 산출
-  const clampedRatio = Math.max(0, Math.min(100, targetBusinessRatio));
-  const targetBusinessDistance = Math.round((totalRequiredDistance * clampedRatio) / 100);
-  const targetNonBusinessDistance = totalRequiredDistance - targetBusinessDistance;
+  // 일반 평일 난수 분배 (광범위 난수 가중치 및 최소/최대 제어)
+  const dailyTotalList: Record<string, number> = {};
 
-  // 평일 주행거리 할당 계산
-  const dailyCommuteList: Record<string, number> = {};
-  const dailyBusinessList: Record<string, number> = {};
-  const dailyNonBusinessList: Record<string, number> = {};
+  if (normalWorkdayCount > 0) {
+    const userMin = minDailyDistance !== undefined && !isNaN(minDailyDistance) ? Math.max(0, minDailyDistance) : 0;
+    const userMax = maxDailyDistance !== undefined && !isNaN(maxDailyDistance) && maxDailyDistance > 0
+      ? maxDailyDistance
+      : Math.ceil(normalTargetDistance / Math.max(1, normalWorkdayCount) * 2.5);
 
-  if (workdayCount > 0) {
-    // 1) 기본 출퇴근 거리 계산
-    let effectiveCommute = Math.max(0, commuteDistance);
-    let totalCommuteTarget = effectiveCommute * workdayCount;
-
-    // 출퇴근거리 총합이 목표 업무거리를 초과하지 않도록 자동 조정
-    if (totalCommuteTarget > targetBusinessDistance) {
-      effectiveCommute = Math.floor(targetBusinessDistance / workdayCount);
-      totalCommuteTarget = effectiveCommute * workdayCount;
-    }
-
-    let remainingBusiness = targetBusinessDistance - totalCommuteTarget;
-
-    // 출퇴근거리 할당
-    workdays.forEach(d => {
-      dailyCommuteList[d] = effectiveCommute;
-      dailyBusinessList[d] = 0;
-      dailyNonBusinessList[d] = 0;
+    // 넓은 범위 난수 생성기 (지수형 파동 및 시드 난수 적용으로 고른 분포 지양)
+    const rawWeights: number[] = normalWorkdays.map((dateStr, idx) => {
+      // 넓은 분산을 위해 비선형 함수(지수 + 사인 파동) 결합
+      const seed1 = Math.abs(Math.sin((idx + 1) * 31337 + normalTargetDistance));
+      const seed2 = Math.abs(Math.cos((idx + 1) * 7919));
+      const wideVariance = Math.pow(seed1, 2.5) * 3.5 + seed2 * 0.5;
+      return Math.max(0.1, wideVariance);
     });
 
-    // 2) 일반 업무용 거리 가중치 무작위 분배
-    if (remainingBusiness > 0) {
-      const weights: number[] = workdays.map((d, idx) => {
-        const pseudoRandom = Math.abs(Math.sin((idx + 1) * 997 + remainingBusiness));
-        return 0.5 + pseudoRandom * 1.5;
-      });
+    const totalWeight = rawWeights.reduce((a, b) => a + b, 0);
+    let allocatedSum = 0;
 
-      const totalWeight = weights.reduce((a, b) => a + b, 0);
-      let allocatedSum = 0;
+    normalWorkdays.forEach((dateStr, idx) => {
+      if (idx === normalWorkdayCount - 1) {
+        // 마지막 날 단수 차이 보정하여 총 필요거리 100% 일치
+        let finalVal = normalTargetDistance - allocatedSum;
+        if (finalVal < 0) finalVal = 0;
+        dailyTotalList[dateStr] = finalVal;
+      } else {
+        let calculated = Math.floor((normalTargetDistance * rawWeights[idx]) / totalWeight);
 
-      workdays.forEach((d, idx) => {
-        if (idx === workdayCount - 1) {
-          dailyBusinessList[d] = remainingBusiness - allocatedSum;
-        } else {
-          const share = Math.floor((remainingBusiness * weights[idx]) / totalWeight);
-          dailyBusinessList[d] = share;
-          allocatedSum += share;
-        }
-      });
-    }
+        // 최소/최대 주행거리 제어 적용
+        if (userMin > 0) calculated = Math.max(userMin, calculated);
+        if (userMax > 0) calculated = Math.min(userMax, calculated);
 
-    // 3) 비업무용 거리 평일 분배
-    if (targetNonBusinessDistance > 0) {
-      let allocatedNonBizSum = 0;
-      workdays.forEach((d, idx) => {
-        if (idx === workdayCount - 1) {
-          dailyNonBusinessList[d] = targetNonBusinessDistance - allocatedNonBizSum;
-        } else {
-          const share = Math.floor(targetNonBusinessDistance / workdayCount);
-          dailyNonBusinessList[d] = share;
-          allocatedNonBizSum += share;
-        }
-      });
-    }
+        dailyTotalList[dateStr] = calculated;
+        allocatedSum += calculated;
+      }
+    });
+  } else if (normalTargetDistance > 0 && totalSpecialDistance === 0) {
+    throw new Error('운행이 가능한 평일이 없습니다. 작성 기간 또는 휴가/공휴일 설정을 확인해주세요.');
   }
 
   // 일별 계기판 연속 누적 생성
@@ -146,33 +144,40 @@ export function generateAutoLogbook(input: LogbookInput): AutoLogResult {
 
   allDateStrs.forEach(dateStr => {
     const isHoliday = !!holidayReasons[dateStr];
+    const isSpecial = !!specialMap[dateStr];
     const dayOfWeek = getDayOfWeekName(dateStr);
 
     let commute = 0;
     let business = 0;
-    let nonBusiness = 0;
     let total = 0;
     let remarks = '';
 
     if (isHoliday) {
       commute = 0;
       business = 0;
-      nonBusiness = 0;
       total = 0;
       remarks = holidayReasons[dateStr] || '휴무';
+    } else if (isSpecial) {
+      // 확정 특수 일정 (장거리 지방 출장 등)
+      const spec = specialMap[dateStr];
+      commute = 0;
+      business = spec.distance;
+      total = spec.distance;
+      remarks = spec.remarks || '특수 장거리 출장';
     } else {
-      commute = dailyCommuteList[dateStr] || 0;
-      business = dailyBusinessList[dateStr] || 0;
-      nonBusiness = dailyNonBusinessList[dateStr] || 0;
-      total = commute + business + nonBusiness;
+      // 일반 평일
+      total = dailyTotalList[dateStr] || 0;
+      const baseCommute = Math.max(0, commuteDistance);
 
-      if (nonBusiness > 0 && (commute > 0 || business > 0)) {
-        remarks = '업무 및 비업무 병행';
-      } else if (business > 0) {
-        remarks = '업무 출장 및 방문';
+      if (total >= baseCommute) {
+        commute = baseCommute;
+        business = total - baseCommute;
       } else {
-        remarks = '출퇴근';
+        commute = total;
+        business = 0;
       }
+
+      remarks = business > 0 ? '업무 출장 및 방문' : (commute > 0 ? '출퇴근' : '운행 없음');
     }
 
     const startOdometer = currentOdometer;
@@ -191,7 +196,8 @@ export function generateAutoLogbook(input: LogbookInput): AutoLogResult {
       businessDistance: business,
       remarks,
       isHolidayOrWeekend: isHoliday,
-      holidayReason: holidayReasons[dateStr]
+      holidayReason: holidayReasons[dateStr],
+      isSpecialSchedule: isSpecial
     });
   });
 

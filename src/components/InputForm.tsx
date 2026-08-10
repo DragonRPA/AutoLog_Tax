@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { FuelType, LogbookInput } from '@/types/logbook';
+import { FuelType, LogbookInput, SpecialScheduleItem } from '@/types/logbook';
 import { getStatutoryHolidaysForYear, KOREAN_HOLIDAYS_MAP } from '@/utils/holidays';
-import { Calendar, Plus, Trash2, RefreshCw, FileText, Download, Save, RotateCcw } from 'lucide-react';
+import { Calendar, Plus, Trash2, RefreshCw, FileText, Download, Save, RotateCcw, MapPin, Sliders } from 'lucide-react';
 
 interface InputFormProps {
   onGenerate: (input: LogbookInput) => void;
@@ -38,9 +38,21 @@ export const InputForm: React.FC<InputFormProps> = ({
   const [finalOdometer, setFinalOdometer] = useState<string>('');
   const [commuteDistance, setCommuteDistance] = useState<string>('');
 
+  // 최소/최대 당일 주행거리 설정
+  const [minDailyDistance, setMinDailyDistance] = useState<string>('');
+  const [maxDailyDistance, setMaxDailyDistance] = useState<string>('');
+
+  // 특수 일정 (장거리 출장) 관리
+  const [specialDateInput, setSpecialDateInput] = useState('');
+  const [specialDistInput, setSpecialDistInput] = useState('');
+  const [specialRemarksInput, setSpecialRemarksInput] = useState('');
+  const [specialSchedules, setSpecialSchedules] = useState<SpecialScheduleItem[]>([]);
+
+  // 휴가일 관리
   const [vacationInput, setVacationInput] = useState('');
   const [vacationDates, setVacationDates] = useState<string[]>([]);
 
+  // 공휴일 및 공휴일 명칭 관리
   const [holidayInput, setHolidayInput] = useState('');
   const [holidayNameInput, setHolidayNameInput] = useState('');
   const [customHolidays, setCustomHolidays] = useState<string[]>([]);
@@ -64,11 +76,13 @@ export const InputForm: React.FC<InputFormProps> = ({
         if (parsed.initialOdometer !== undefined) setInitialOdometer(parsed.initialOdometer);
         if (parsed.finalOdometer !== undefined) setFinalOdometer(parsed.finalOdometer);
         if (parsed.commuteDistance !== undefined) setCommuteDistance(parsed.commuteDistance);
+        if (parsed.minDailyDistance !== undefined) setMinDailyDistance(parsed.minDailyDistance);
+        if (parsed.maxDailyDistance !== undefined) setMaxDailyDistance(parsed.maxDailyDistance);
+        if (Array.isArray(parsed.specialSchedules)) setSpecialSchedules(parsed.specialSchedules);
         if (Array.isArray(parsed.vacationDates)) setVacationDates(parsed.vacationDates);
         if (Array.isArray(parsed.customHolidays)) setCustomHolidays(parsed.customHolidays);
         if (parsed.holidayNames) setHolidayNames(parsed.holidayNames);
       } else {
-        // 최초 사용자: 2026 기본 공휴일 자동 로딩
         loadStatutoryHolidays(2026);
       }
     } catch (err) {
@@ -95,6 +109,9 @@ export const InputForm: React.FC<InputFormProps> = ({
         initialOdometer,
         finalOdometer,
         commuteDistance,
+        minDailyDistance,
+        maxDailyDistance,
+        specialSchedules,
         vacationDates,
         customHolidays,
         holidayNames
@@ -117,6 +134,9 @@ export const InputForm: React.FC<InputFormProps> = ({
     initialOdometer,
     finalOdometer,
     commuteDistance,
+    minDailyDistance,
+    maxDailyDistance,
+    specialSchedules,
     vacationDates,
     customHolidays,
     holidayNames
@@ -149,11 +169,44 @@ export const InputForm: React.FC<InputFormProps> = ({
       setInitialOdometer('');
       setFinalOdometer('');
       setCommuteDistance('');
+      setMinDailyDistance('');
+      setMaxDailyDistance('');
+      setSpecialSchedules([]);
       setVacationDates([]);
       setCustomHolidays([]);
       setHolidayNames({});
       loadStatutoryHolidays(2026);
     }
+  };
+
+  const handleAddSpecialSchedule = () => {
+    if (!specialDateInput) {
+      alert('특수 일정 날짜를 선택해 주세요.');
+      return;
+    }
+    const distNum = Number(specialDistInput);
+    if (!specialDistInput || isNaN(distNum) || distNum <= 0) {
+      alert('올바른 주행거리를 입력해 주세요 (예: 380km).');
+      return;
+    }
+
+    const remarks = specialRemarksInput.trim() || '특수 장거리 출장';
+
+    // 동일 날짜 기존 항목 대체 또는 추가
+    setSpecialSchedules(prev => {
+      const filtered = prev.filter(s => s.date !== specialDateInput);
+      return [...filtered, { date: specialDateInput, distance: distNum, remarks }].sort((a, b) =>
+        a.date.localeCompare(b.date)
+      );
+    });
+
+    setSpecialDateInput('');
+    setSpecialDistInput('');
+    setSpecialRemarksInput('');
+  };
+
+  const handleRemoveSpecialSchedule = (dateToRemove: string) => {
+    setSpecialSchedules(prev => prev.filter(s => s.date !== dateToRemove));
   };
 
   const handleAddVacation = () => {
@@ -229,6 +282,8 @@ export const InputForm: React.FC<InputFormProps> = ({
     const initVal = Number(initialOdometer);
     const finalVal = Number(finalOdometer);
     const commuteVal = Number(commuteDistance) || 0;
+    const minVal = minDailyDistance !== '' ? Number(minDailyDistance) : undefined;
+    const maxVal = maxDailyDistance !== '' ? Number(maxDailyDistance) : undefined;
 
     if (!initialOdometer || isNaN(initVal)) {
       throw new Error('시작 계기판 거리를 입력해주세요.');
@@ -251,6 +306,9 @@ export const InputForm: React.FC<InputFormProps> = ({
       initialOdometer: initVal,
       finalOdometer: finalVal,
       commuteDistance: commuteVal,
+      minDailyDistance: minVal,
+      maxDailyDistance: maxVal,
+      specialSchedules,
       targetBusinessRatio: 100,
       vacationDates,
       customHolidays,
@@ -393,15 +451,15 @@ export const InputForm: React.FC<InputFormProps> = ({
 
         <hr className="border-slate-200 dark:border-slate-800" />
 
-        {/* 2. 작성 기간 및 계기판 설정 */}
+        {/* 2. 작성 기간, 계기판 및 주행거리 제어 범위 */}
         <div>
           <h3 className="text-sm font-semibold text-slate-700 dark:text-slate-300 mb-3 whitespace-nowrap">
-            2. 작성 기간 및 계기판 설정
+            2. 작성 기간, 계기판 및 일별 주행거리 범위 설정
           </h3>
-          <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-7 gap-4">
             <div className="flex flex-col gap-1">
               <label className="text-xs font-semibold text-slate-600 dark:text-slate-400 whitespace-nowrap flex-shrink-0">
-                운행일지 작성 시작일
+                작성 시작일
               </label>
               <input
                 type="date"
@@ -414,7 +472,7 @@ export const InputForm: React.FC<InputFormProps> = ({
 
             <div className="flex flex-col gap-1">
               <label className="text-xs font-semibold text-slate-600 dark:text-slate-400 whitespace-nowrap flex-shrink-0">
-                운행일지 작성 종료일
+                작성 종료일
               </label>
               <input
                 type="date"
@@ -427,7 +485,7 @@ export const InputForm: React.FC<InputFormProps> = ({
 
             <div className="flex flex-col gap-1">
               <label className="text-xs font-semibold text-slate-600 dark:text-slate-400 whitespace-nowrap flex-shrink-0">
-                시작 계기판 거리 (km)
+                시작 계기판 (km)
               </label>
               <input
                 type="number"
@@ -442,7 +500,7 @@ export const InputForm: React.FC<InputFormProps> = ({
 
             <div className="flex flex-col gap-1">
               <label className="text-xs font-semibold text-slate-600 dark:text-slate-400 whitespace-nowrap flex-shrink-0">
-                종료 계기판 거리 (km)
+                종료 계기판 (km)
               </label>
               <input
                 type="number"
@@ -457,7 +515,7 @@ export const InputForm: React.FC<InputFormProps> = ({
 
             <div className="flex flex-col gap-1">
               <label className="text-xs font-semibold text-slate-600 dark:text-slate-400 whitespace-nowrap flex-shrink-0">
-                출퇴근용 주행거리 (km/일)
+                출퇴근 거리 (km/일)
               </label>
               <input
                 type="number"
@@ -469,15 +527,120 @@ export const InputForm: React.FC<InputFormProps> = ({
                 className="px-3 py-2 text-sm border border-slate-300 dark:border-slate-700 rounded-md bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-sky-500 outline-none text-right font-mono"
               />
             </div>
+
+            {/* 최소/최대 주행거리 제어 */}
+            <div className="flex flex-col gap-1">
+              <label className="text-xs font-semibold text-slate-600 dark:text-slate-400 whitespace-nowrap flex-shrink-0 flex items-center gap-1">
+                <Sliders className="w-3.5 h-3.5 text-sky-600" />
+                <span>최소 당일 주행거리</span>
+              </label>
+              <input
+                type="number"
+                value={minDailyDistance}
+                onChange={e => setMinDailyDistance(e.target.value)}
+                placeholder="예: 10 (km)"
+                min={0}
+                className="px-3 py-2 text-sm border border-slate-300 dark:border-slate-700 rounded-md bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-sky-500 outline-none text-right font-mono"
+              />
+            </div>
+
+            <div className="flex flex-col gap-1">
+              <label className="text-xs font-semibold text-slate-600 dark:text-slate-400 whitespace-nowrap flex-shrink-0 flex items-center gap-1">
+                <Sliders className="w-3.5 h-3.5 text-sky-600" />
+                <span>최대 당일 주행거리</span>
+              </label>
+              <input
+                type="number"
+                value={maxDailyDistance}
+                onChange={e => setMaxDailyDistance(e.target.value)}
+                placeholder="예: 150 (km)"
+                min={0}
+                className="px-3 py-2 text-sm border border-slate-300 dark:border-slate-700 rounded-md bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-sky-500 outline-none text-right font-mono"
+              />
+            </div>
           </div>
         </div>
 
         <hr className="border-slate-200 dark:border-slate-800" />
 
-        {/* 3. 휴가일 및 명절/공휴일 지정 */}
+        {/* 3. 특수 일정 (장거리 출장) 설정 */}
+        <div>
+          <div className="flex items-center justify-between mb-3">
+            <h3 className="text-sm font-semibold text-slate-700 dark:text-slate-300 whitespace-nowrap flex items-center gap-1.5">
+              <MapPin className="w-4 h-4 text-emerald-600" />
+              <span>3. 특수 일정 설정 (확정 장거리 출장 지정)</span>
+            </h3>
+            <span className="text-xs text-slate-500 whitespace-nowrap">
+              * 해당 날짜는 지정 주행거리로 우선 고정 반영됩니다.
+            </span>
+          </div>
+
+          <div className="flex flex-col gap-3">
+            <div className="flex flex-wrap items-center gap-2">
+              <input
+                type="date"
+                value={specialDateInput}
+                onChange={e => setSpecialDateInput(e.target.value)}
+                className="px-3 py-1.5 text-sm border border-slate-300 dark:border-slate-700 rounded-md bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 outline-none w-36"
+              />
+              <input
+                type="number"
+                placeholder="주행거리 (예: 380km)"
+                value={specialDistInput}
+                onChange={e => setSpecialDistInput(e.target.value)}
+                min={1}
+                className="px-3 py-1.5 text-sm border border-slate-300 dark:border-slate-700 rounded-md bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 outline-none w-36 text-right font-mono"
+              />
+              <input
+                type="text"
+                placeholder="출장 목적/비고 (예: 부산지사 출장)"
+                value={specialRemarksInput}
+                onChange={e => setSpecialRemarksInput(e.target.value)}
+                className="px-3 py-1.5 text-sm border border-slate-300 dark:border-slate-700 rounded-md bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 flex-1 outline-none min-w-[180px]"
+              />
+              <button
+                type="button"
+                onClick={handleAddSpecialSchedule}
+                className="px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold rounded-md flex items-center gap-1 whitespace-nowrap shadow-sm"
+              >
+                <Plus className="w-4 h-4" />
+                <span>특수 일정 추가</span>
+              </button>
+            </div>
+
+            <div className="flex flex-wrap gap-2 min-h-[42px] p-2 bg-emerald-50/50 dark:bg-emerald-950/20 rounded-md border border-emerald-200 dark:border-emerald-900">
+              {specialSchedules.length === 0 ? (
+                <span className="text-xs text-slate-400 self-center">등록된 특수 장거리 출장 일정이 없습니다.</span>
+              ) : (
+                specialSchedules.map(item => (
+                  <span
+                    key={item.date}
+                    className="inline-flex items-center gap-1.5 px-3 py-1 bg-emerald-100 dark:bg-emerald-950/80 text-emerald-900 dark:text-emerald-200 border border-emerald-300 dark:border-emerald-800 rounded-md text-xs whitespace-nowrap shadow-sm"
+                  >
+                    <span className="font-mono font-bold">{item.date}</span>
+                    <span className="font-mono font-extrabold text-emerald-700 dark:text-emerald-300">{item.distance.toLocaleString()}km</span>
+                    <span className="text-[11px] text-emerald-800 dark:text-emerald-400 font-sans">({item.remarks})</span>
+                    <button
+                      type="button"
+                      onClick={() => handleRemoveSpecialSchedule(item.date)}
+                      className="hover:text-rose-600 ml-1"
+                      title="삭제"
+                    >
+                      <Trash2 className="w-3 h-3" />
+                    </button>
+                  </span>
+                ))
+              )}
+            </div>
+          </div>
+        </div>
+
+        <hr className="border-slate-200 dark:border-slate-800" />
+
+        {/* 4. 휴가일 및 명절/공휴일 지정 */}
         <div>
           <h3 className="text-sm font-semibold text-slate-700 dark:text-slate-300 mb-3 whitespace-nowrap">
-            3. 휴가일 및 명절/공휴일 설정 (차량 운행 0km 제어)
+            4. 휴가일 및 명절/공휴일 설정 (차량 운행 0km 제어)
           </h3>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -596,7 +759,7 @@ export const InputForm: React.FC<InputFormProps> = ({
           </div>
         </div>
 
-        {/* 4. 실행 버튼 영역 */}
+        {/* 5. 실행 버튼 영역 */}
         <div className="pt-4 border-t border-slate-200 dark:border-slate-800 flex items-center justify-end gap-3">
           <button
             type="submit"
