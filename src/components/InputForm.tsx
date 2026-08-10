@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { FuelType, LogbookInput } from '@/types/logbook';
 import { getStatutoryHolidaysForYear, KOREAN_HOLIDAYS_MAP } from '@/utils/holidays';
-import { Calendar, Plus, Trash2, RefreshCw, FileText, Download } from 'lucide-react';
+import { Calendar, Plus, Trash2, RefreshCw, FileText, Download, Save, RotateCcw } from 'lucide-react';
 
 interface InputFormProps {
   onGenerate: (input: LogbookInput) => void;
@@ -11,6 +11,8 @@ interface InputFormProps {
   isDownloading: boolean;
 }
 
+const LOCAL_STORAGE_KEY = 'autolog_tax_saved_data_v1';
+
 export const InputForm: React.FC<InputFormProps> = ({
   onGenerate,
   onDownloadExcel,
@@ -18,6 +20,8 @@ export const InputForm: React.FC<InputFormProps> = ({
   isGenerating,
   isDownloading
 }) => {
+  const [isLoaded, setIsLoaded] = useState(false);
+
   const [companyName, setCompanyName] = useState('(주)이렌컴');
   const [bizRegNumber, setBizRegNumber] = useState('206-81-25423');
   const [vehicleModel, setVehicleModel] = useState('싼타페');
@@ -29,30 +33,93 @@ export const InputForm: React.FC<InputFormProps> = ({
   const [startDate, setStartDate] = useState('2026-01-01');
   const [endDate, setEndDate] = useState('2026-12-31');
 
-  // 계기판 및 출퇴근거리 초기값 공백
   const [initialOdometer, setInitialOdometer] = useState<string>('');
   const [finalOdometer, setFinalOdometer] = useState<string>('');
   const [commuteDistance, setCommuteDistance] = useState<string>('');
 
-  // 휴가일 초기값 공백
   const [vacationInput, setVacationInput] = useState('');
   const [vacationDates, setVacationDates] = useState<string[]>([]);
 
-  // 공휴일 및 공휴일 명칭 관리
   const [holidayInput, setHolidayInput] = useState('');
   const [holidayNameInput, setHolidayNameInput] = useState('');
   const [customHolidays, setCustomHolidays] = useState<string[]>([]);
   const [holidayNames, setHolidayNames] = useState<Record<string, string>>({});
 
-  // 시작일 연도 변경 시 한국 법정공휴일 자동 불러오기
+  // 1. 마운트 시 LocalStorage 저장된 데이터 자동 복원
   useEffect(() => {
-    if (startDate) {
-      const year = new Date(startDate).getFullYear();
-      if (!isNaN(year)) {
-        loadStatutoryHolidays(year);
+    try {
+      const saved = localStorage.getItem(LOCAL_STORAGE_KEY);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (parsed.companyName !== undefined) setCompanyName(parsed.companyName);
+        if (parsed.bizRegNumber !== undefined) setBizRegNumber(parsed.bizRegNumber);
+        if (parsed.vehicleModel !== undefined) setVehicleModel(parsed.vehicleModel);
+        if (parsed.licensePlate !== undefined) setLicensePlate(parsed.licensePlate);
+        if (parsed.fuelType !== undefined) setFuelType(parsed.fuelType);
+        if (parsed.deptName !== undefined) setDeptName(parsed.deptName);
+        if (parsed.driverName !== undefined) setDriverName(parsed.driverName);
+        if (parsed.startDate !== undefined) setStartDate(parsed.startDate);
+        if (parsed.endDate !== undefined) setEndDate(parsed.endDate);
+        if (parsed.initialOdometer !== undefined) setInitialOdometer(parsed.initialOdometer);
+        if (parsed.finalOdometer !== undefined) setFinalOdometer(parsed.finalOdometer);
+        if (parsed.commuteDistance !== undefined) setCommuteDistance(parsed.commuteDistance);
+        if (Array.isArray(parsed.vacationDates)) setVacationDates(parsed.vacationDates);
+        if (Array.isArray(parsed.customHolidays)) setCustomHolidays(parsed.customHolidays);
+        if (parsed.holidayNames) setHolidayNames(parsed.holidayNames);
+      } else {
+        // 저장된 데이터가 없는 경우 2026 기본 공휴일 로딩
+        loadStatutoryHolidays(2026);
       }
+    } catch (err) {
+      console.error('로컬스토리지 불러오기 실패:', err);
+    } finally {
+      setIsLoaded(true);
     }
-  }, [startDate]);
+  }, []);
+
+  // 2. 입력값 변경 시 LocalStorage 실시간 자동 저장
+  useEffect(() => {
+    if (!isLoaded) return;
+    try {
+      const dataToSave = {
+        companyName,
+        bizRegNumber,
+        vehicleModel,
+        licensePlate,
+        fuelType,
+        deptName,
+        driverName,
+        startDate,
+        endDate,
+        initialOdometer,
+        finalOdometer,
+        commuteDistance,
+        vacationDates,
+        customHolidays,
+        holidayNames
+      };
+      localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(dataToSave));
+    } catch (err) {
+      console.error('로컬스토리지 저장 실패:', err);
+    }
+  }, [
+    isLoaded,
+    companyName,
+    bizRegNumber,
+    vehicleModel,
+    licensePlate,
+    fuelType,
+    deptName,
+    driverName,
+    startDate,
+    endDate,
+    initialOdometer,
+    finalOdometer,
+    commuteDistance,
+    vacationDates,
+    customHolidays,
+    holidayNames
+  ]);
 
   const loadStatutoryHolidays = (year: number) => {
     const statutory = getStatutoryHolidaysForYear(year);
@@ -64,6 +131,28 @@ export const InputForm: React.FC<InputFormProps> = ({
 
     setCustomHolidays(prev => Array.from(new Set([...prev, ...newDates])).sort());
     setHolidayNames(newNamesMap);
+  };
+
+  const handleResetStorage = () => {
+    if (window.confirm('저장된 모든 정보 및 휴가/공휴일 설정을 초기화하시겠습니까?')) {
+      localStorage.removeItem(LOCAL_STORAGE_KEY);
+      setCompanyName('(주)이렌컴');
+      setBizRegNumber('206-81-25423');
+      setVehicleModel('싼타페');
+      setLicensePlate('122소2232');
+      setFuelType('휘발유');
+      setDeptName('신규영업팀');
+      setDriverName('차승후');
+      setStartDate('2026-01-01');
+      setEndDate('2026-12-31');
+      setInitialOdometer('');
+      setFinalOdometer('');
+      setCommuteDistance('');
+      setVacationDates([]);
+      setCustomHolidays([]);
+      setHolidayNames({});
+      loadStatutoryHolidays(2026);
+    }
   };
 
   const handleAddVacation = () => {
@@ -148,7 +237,7 @@ export const InputForm: React.FC<InputFormProps> = ({
       initialOdometer: initVal,
       finalOdometer: finalVal,
       commuteDistance: commuteVal,
-      targetBusinessRatio: 100, // 기본 100% 업무용 적용
+      targetBusinessRatio: 100,
       vacationDates,
       customHolidays,
       holidayNames
@@ -162,8 +251,20 @@ export const InputForm: React.FC<InputFormProps> = ({
           <Calendar className="w-5 h-5 text-sky-600" />
           <span>운행기록부 기본 정보 및 운행 조건 입력</span>
         </h2>
-        <div className="text-xs text-slate-500 whitespace-nowrap">
-          * 과세기간: 작성 시작일 속한 1년 자동 산출
+        <div className="flex items-center gap-3">
+          <span className="text-xs text-emerald-600 dark:text-emerald-400 font-medium flex items-center gap-1 whitespace-nowrap bg-emerald-50 dark:bg-emerald-950/60 px-2.5 py-1 rounded-md border border-emerald-200 dark:border-emerald-800">
+            <Save className="w-3.5 h-3.5" />
+            <span>브라우저 자동 저장 활성화</span>
+          </span>
+          <button
+            type="button"
+            onClick={handleResetStorage}
+            className="text-xs text-slate-500 hover:text-slate-800 dark:hover:text-slate-200 font-medium flex items-center gap-1 whitespace-nowrap border border-slate-300 dark:border-slate-700 px-2 py-1 rounded bg-white dark:bg-slate-800"
+            title="초기 상태로 되돌리기"
+          >
+            <RotateCcw className="w-3 h-3" />
+            <span>초기화</span>
+          </button>
         </div>
       </div>
 
