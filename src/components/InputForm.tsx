@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { FuelType, LogbookInput } from '@/types/logbook';
 import { getStatutoryHolidaysForYear, KOREAN_HOLIDAYS_MAP } from '@/utils/holidays';
-import { Calendar, Plus, Trash2, RefreshCw, FileText, Download, Percent, Calculator } from 'lucide-react';
+import { Calendar, Plus, Trash2, RefreshCw, FileText, Download } from 'lucide-react';
 
 interface InputFormProps {
   onGenerate: (input: LogbookInput) => void;
@@ -29,13 +29,12 @@ export const InputForm: React.FC<InputFormProps> = ({
   const [startDate, setStartDate] = useState('2026-01-01');
   const [endDate, setEndDate] = useState('2026-12-31');
 
-  // 계기판 및 출퇴근거리 초기값을 공백("")으로 지정
+  // 계기판 및 출퇴근거리 초기값 공백
   const [initialOdometer, setInitialOdometer] = useState<string>('');
   const [finalOdometer, setFinalOdometer] = useState<string>('');
   const [commuteDistance, setCommuteDistance] = useState<string>('');
-  const [targetBusinessRatio, setTargetBusinessRatio] = useState<number>(95);
 
-  // 휴가일 초기값을 공백 목록([])으로 지정
+  // 휴가일 초기값 공백
   const [vacationInput, setVacationInput] = useState('');
   const [vacationDates, setVacationDates] = useState<string[]>([]);
 
@@ -44,13 +43,6 @@ export const InputForm: React.FC<InputFormProps> = ({
   const [holidayNameInput, setHolidayNameInput] = useState('');
   const [customHolidays, setCustomHolidays] = useState<string[]>([]);
   const [holidayNames, setHolidayNames] = useState<Record<string, string>>({});
-
-  // 실시간 예상 시뮬레이션 계산 (공백 입력 대응)
-  const initNum = Number(initialOdometer) || 0;
-  const finalNum = Number(finalOdometer) || 0;
-  const totalEstimatedDistance = finalNum > initNum ? finalNum - initNum : 0;
-  const estimatedBusinessDistance = Math.round((totalEstimatedDistance * targetBusinessRatio) / 100);
-  const estimatedNonBusinessDistance = totalEstimatedDistance - estimatedBusinessDistance;
 
   // 시작일 연도 변경 시 한국 법정공휴일 자동 불러오기
   useEffect(() => {
@@ -156,7 +148,7 @@ export const InputForm: React.FC<InputFormProps> = ({
       initialOdometer: initVal,
       finalOdometer: finalVal,
       commuteDistance: commuteVal,
-      targetBusinessRatio,
+      targetBusinessRatio: 100, // 기본 100% 업무용 적용
       vacationDates,
       customHolidays,
       holidayNames
@@ -282,15 +274,15 @@ export const InputForm: React.FC<InputFormProps> = ({
 
         <hr className="border-slate-200 dark:border-slate-800" />
 
-        {/* 2. 작성 기간, 계기판 및 목표 업무사용비율 설정 */}
+        {/* 2. 작성 기간 및 계기판 설정 */}
         <div>
           <h3 className="text-sm font-semibold text-slate-700 dark:text-slate-300 mb-3 whitespace-nowrap">
-            2. 작성 기간, 계기판 및 업무사용비율(%) 정밀 설정
+            2. 작성 기간 및 계기판 설정
           </h3>
-          <div className="grid grid-cols-1 md:grid-cols-6 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
             <div className="flex flex-col gap-1">
               <label className="text-xs font-semibold text-slate-600 dark:text-slate-400 whitespace-nowrap flex-shrink-0">
-                작성 시작일
+                운행일지 작성 시작일
               </label>
               <input
                 type="date"
@@ -303,7 +295,7 @@ export const InputForm: React.FC<InputFormProps> = ({
 
             <div className="flex flex-col gap-1">
               <label className="text-xs font-semibold text-slate-600 dark:text-slate-400 whitespace-nowrap flex-shrink-0">
-                작성 종료일
+                운행일지 작성 종료일
               </label>
               <input
                 type="date"
@@ -339,7 +331,7 @@ export const InputForm: React.FC<InputFormProps> = ({
                 onChange={e => setFinalOdometer(e.target.value)}
                 placeholder="예: 45800"
                 required
-                min={initNum}
+                min={Number(initialOdometer) || 0}
                 className="px-3 py-2 text-sm border border-slate-300 dark:border-slate-700 rounded-md bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-sky-500 outline-none text-right font-mono"
               />
             </div>
@@ -357,76 +349,6 @@ export const InputForm: React.FC<InputFormProps> = ({
                 min={0}
                 className="px-3 py-2 text-sm border border-slate-300 dark:border-slate-700 rounded-md bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-sky-500 outline-none text-right font-mono"
               />
-            </div>
-
-            {/* ⑬ 목표 업무사용비율 (%) */}
-            <div className="flex flex-col gap-1">
-              <div className="flex items-center justify-between">
-                <label className="text-xs font-bold text-sky-700 dark:text-sky-400 whitespace-nowrap flex-shrink-0 flex items-center gap-1">
-                  <Percent className="w-3.5 h-3.5" />
-                  <span>목표 업무사용비율 (%)</span>
-                </label>
-              </div>
-              <div className="flex items-center gap-1">
-                <input
-                  type="number"
-                  value={targetBusinessRatio}
-                  onChange={e => setTargetBusinessRatio(Number(e.target.value))}
-                  required
-                  min={1}
-                  max={100}
-                  step={1}
-                  className="px-3 py-2 text-sm font-bold border-2 border-sky-500 dark:border-sky-600 rounded-md bg-sky-50 dark:bg-sky-950/60 text-sky-900 dark:text-sky-100 focus:ring-2 focus:ring-sky-500 outline-none text-right font-mono w-full"
-                />
-                <span className="text-xs font-bold text-sky-700 dark:text-sky-400">%</span>
-              </div>
-              <div className="flex gap-1 mt-1">
-                {[100, 95, 90, 85].map(r => (
-                  <button
-                    key={r}
-                    type="button"
-                    onClick={() => setTargetBusinessRatio(r)}
-                    className={`px-1.5 py-0.5 text-[11px] font-semibold rounded border ${
-                      targetBusinessRatio === r
-                        ? 'bg-sky-600 text-white border-sky-600'
-                        : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 border-slate-300 dark:border-slate-700 hover:bg-slate-200'
-                    }`}
-                  >
-                    {r}%
-                  </button>
-                ))}
-              </div>
-            </div>
-          </div>
-
-          {/* 수식 시뮬레이션 실시간 프리뷰 카드 */}
-          <div className="mt-4 p-3 bg-slate-50 dark:bg-slate-800/60 rounded-lg border border-slate-200 dark:border-slate-700 flex flex-col md:flex-row items-center justify-between text-xs gap-3">
-            <div className="flex items-center gap-2 text-slate-700 dark:text-slate-300 whitespace-nowrap">
-              <Calculator className="w-4 h-4 text-sky-600" />
-              <span className="font-semibold">실시간 계산 프리뷰:</span>
-            </div>
-            <div className="flex items-center gap-6 font-mono whitespace-nowrap">
-              <div>
-                <span className="text-slate-500">⑪총 주행거리:</span>{' '}
-                <strong className="text-slate-900 dark:text-slate-100">
-                  {totalEstimatedDistance > 0 ? `${totalEstimatedDistance.toLocaleString()} km` : '- km'}
-                </strong>
-              </div>
-              <div>
-                <span className="text-amber-600 dark:text-amber-400 font-semibold">⑫예상 업무용 사용거리:</span>{' '}
-                <strong className="text-amber-700 dark:text-amber-300">
-                  {estimatedBusinessDistance > 0 ? `${estimatedBusinessDistance.toLocaleString()} km` : '- km'}
-                </strong>
-              </div>
-              <div>
-                <span className="text-slate-500">예상 비업무 거리:</span>{' '}
-                <span className="text-slate-700 dark:text-slate-300">
-                  {estimatedNonBusinessDistance > 0 ? `${estimatedNonBusinessDistance.toLocaleString()} km` : '0 km'}
-                </span>
-              </div>
-              <div className="bg-yellow-200 dark:bg-yellow-900/60 px-2 py-0.5 rounded border border-yellow-300 dark:border-yellow-700 text-slate-900 dark:text-yellow-100 font-bold">
-                ⑬목표 비율: {targetBusinessRatio.toFixed(1)}%
-              </div>
             </div>
           </div>
         </div>
