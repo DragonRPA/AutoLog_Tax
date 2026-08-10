@@ -1,0 +1,437 @@
+import React, { useState, useEffect } from 'react';
+import { FuelType, LogbookInput } from '@/types/logbook';
+import { getStatutoryHolidaysForYear } from '@/utils/holidays';
+import { Calendar, Plus, Trash2, RefreshCw, FileText, Download } from 'lucide-react';
+
+interface InputFormProps {
+  onGenerate: (input: LogbookInput) => void;
+  onDownloadExcel: () => void;
+  hasGeneratedData: boolean;
+  isGenerating: boolean;
+  isDownloading: boolean;
+}
+
+export const InputForm: React.FC<InputFormProps> = ({
+  onGenerate,
+  onDownloadExcel,
+  hasGeneratedData,
+  isGenerating,
+  isDownloading
+}) => {
+  const [companyName, setCompanyName] = useState('(주)이렌컴');
+  const [bizRegNumber, setBizRegNumber] = useState('206-81-25423');
+  const [vehicleModel, setVehicleModel] = useState('싼타페');
+  const [licensePlate, setLicensePlate] = useState('122소2232');
+  const [fuelType, setFuelType] = useState<FuelType>('휘발유');
+  const [deptName, setDeptName] = useState('신규영업팀');
+  const [driverName, setDriverName] = useState('차승후');
+
+  const [startDate, setStartDate] = useState('2026-01-01');
+  const [endDate, setEndDate] = useState('2026-12-31');
+  const [initialOdometer, setInitialOdometer] = useState<number>(37288);
+  const [finalOdometer, setFinalOdometer] = useState<number>(45800);
+  const [commuteDistance, setCommuteDistance] = useState<number>(40);
+
+  // 휴가일 및 공휴일 관리
+  const [vacationInput, setVacationInput] = useState('');
+  const [vacationDates, setVacationDates] = useState<string[]>(['2026-07-27', '2026-07-28']);
+
+  const [holidayInput, setHolidayInput] = useState('');
+  const [holidayNameInput, setHolidayNameInput] = useState('');
+  const [customHolidays, setCustomHolidays] = useState<string[]>([]);
+
+  // 시작일 연도 변경 시 한국 공휴일 자동 불러오기
+  useEffect(() => {
+    if (startDate) {
+      const year = new Date(startDate).getFullYear();
+      if (!isNaN(year)) {
+        const statutory = getStatutoryHolidaysForYear(year);
+        const dates = statutory.map(h => h.date);
+        setCustomHolidays(prev => Array.from(new Set([...prev, ...dates])));
+      }
+    }
+  }, [startDate]);
+
+  const handleAddVacation = () => {
+    if (vacationInput && !vacationDates.includes(vacationInput)) {
+      setVacationDates([...vacationDates, vacationInput].sort());
+      setVacationInput('');
+    }
+  };
+
+  const handleRemoveVacation = (dateToRemove: string) => {
+    setVacationDates(vacationDates.filter(d => d !== dateToRemove));
+  };
+
+  const handleAddHoliday = () => {
+    if (holidayInput && !customHolidays.includes(holidayInput)) {
+      setCustomHolidays([...customHolidays, holidayInput].sort());
+      setHolidayInput('');
+      setHolidayNameInput('');
+    }
+  };
+
+  const handleRemoveHoliday = (dateToRemove: string) => {
+    setCustomHolidays(customHolidays.filter(d => d !== dateToRemove));
+  };
+
+  const handleLoadDefaultHolidays = () => {
+    const year = startDate ? new Date(startDate).getFullYear() : 2026;
+    const statutory = getStatutoryHolidaysForYear(year);
+    const dates = statutory.map(h => h.date);
+    setCustomHolidays(Array.from(new Set([...dates])));
+  };
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    onGenerate({
+      companyName,
+      bizRegNumber,
+      vehicleModel,
+      licensePlate,
+      fuelType,
+      deptName,
+      driverName,
+      startDate,
+      endDate,
+      initialOdometer,
+      finalOdometer,
+      commuteDistance,
+      vacationDates,
+      customHolidays
+    });
+  };
+
+  return (
+    <form onSubmit={handleSubmit} className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm overflow-hidden mb-6">
+      <div className="bg-slate-50 dark:bg-slate-850 px-6 py-4 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between">
+        <h2 className="text-base font-bold text-slate-800 dark:text-slate-100 whitespace-nowrap flex items-center gap-2">
+          <Calendar className="w-5 h-5 text-sky-600" />
+          <span>운행기록부 기본 정보 및 운행 조건 입력</span>
+        </h2>
+        <div className="text-xs text-slate-500 whitespace-nowrap">
+          * 과세기간: 작성 시작일 속한 1년 자동 산출
+        </div>
+      </div>
+
+      <div className="p-6 space-y-6">
+        {/* 1. 회사 및 차량 기본 정보 */}
+        <div>
+          <h3 className="text-sm font-semibold text-slate-700 dark:text-slate-300 mb-3 whitespace-nowrap">
+            1. 사업자 및 차량 기본 정보
+          </h3>
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+            {/* 상하 세로 스택 레이아웃 표준 (flex flex-col gap-1) */}
+            <div className="flex flex-col gap-1">
+              <label className="text-xs font-semibold text-slate-600 dark:text-slate-400 whitespace-nowrap flex-shrink-0">
+                상호명
+              </label>
+              <input
+                type="text"
+                value={companyName}
+                onChange={e => setCompanyName(e.target.value)}
+                required
+                className="px-3 py-2 text-sm border border-slate-300 dark:border-slate-700 rounded-md bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-sky-500 outline-none"
+              />
+            </div>
+
+            <div className="flex flex-col gap-1">
+              <label className="text-xs font-semibold text-slate-600 dark:text-slate-400 whitespace-nowrap flex-shrink-0">
+                사업자등록번호
+              </label>
+              <input
+                type="text"
+                value={bizRegNumber}
+                onChange={e => setBizRegNumber(e.target.value)}
+                required
+                className="px-3 py-2 text-sm border border-slate-300 dark:border-slate-700 rounded-md bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-sky-500 outline-none"
+              />
+            </div>
+
+            <div className="flex flex-col gap-1">
+              <label className="text-xs font-semibold text-slate-600 dark:text-slate-400 whitespace-nowrap flex-shrink-0">
+                차종
+              </label>
+              <input
+                type="text"
+                value={vehicleModel}
+                onChange={e => setVehicleModel(e.target.value)}
+                required
+                className="px-3 py-2 text-sm border border-slate-300 dark:border-slate-700 rounded-md bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-sky-500 outline-none"
+              />
+            </div>
+
+            <div className="flex flex-col gap-1">
+              <label className="text-xs font-semibold text-slate-600 dark:text-slate-400 whitespace-nowrap flex-shrink-0">
+                자동차등록번호
+              </label>
+              <input
+                type="text"
+                value={licensePlate}
+                onChange={e => setLicensePlate(e.target.value)}
+                required
+                className="px-3 py-2 text-sm border border-slate-300 dark:border-slate-700 rounded-md bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-sky-500 outline-none"
+              />
+            </div>
+
+            <div className="flex flex-col gap-1">
+              <label className="text-xs font-semibold text-slate-600 dark:text-slate-400 whitespace-nowrap flex-shrink-0">
+                유종
+              </label>
+              <select
+                value={fuelType}
+                onChange={e => setFuelType(e.target.value as FuelType)}
+                className="px-3 py-2 text-sm border border-slate-300 dark:border-slate-700 rounded-md bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-sky-500 outline-none"
+              >
+                <option value="휘발유">휘발유</option>
+                <option value="경유">경유</option>
+                <option value="LPG">LPG</option>
+                <option value="전기">전기</option>
+                <option value="하이브리드">하이브리드</option>
+                <option value="수소">수소</option>
+              </select>
+            </div>
+
+            <div className="flex flex-col gap-1">
+              <label className="text-xs font-semibold text-slate-600 dark:text-slate-400 whitespace-nowrap flex-shrink-0">
+                부서
+              </label>
+              <input
+                type="text"
+                value={deptName}
+                onChange={e => setDeptName(e.target.value)}
+                required
+                className="px-3 py-2 text-sm border border-slate-300 dark:border-slate-700 rounded-md bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-sky-500 outline-none"
+              />
+            </div>
+
+            <div className="flex flex-col gap-1">
+              <label className="text-xs font-semibold text-slate-600 dark:text-slate-400 whitespace-nowrap flex-shrink-0">
+                성명 (운전자)
+              </label>
+              <input
+                type="text"
+                value={driverName}
+                onChange={e => setDriverName(e.target.value)}
+                required
+                className="px-3 py-2 text-sm border border-slate-300 dark:border-slate-700 rounded-md bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-sky-500 outline-none"
+              />
+            </div>
+          </div>
+        </div>
+
+        <hr className="border-slate-200 dark:border-slate-800" />
+
+        {/* 2. 운행 기간 및 계기판 정보 */}
+        <div>
+          <h3 className="text-sm font-semibold text-slate-700 dark:text-slate-300 mb-3 whitespace-nowrap">
+            2. 작성 기간 및 계기판 설정
+          </h3>
+          <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
+            <div className="flex flex-col gap-1">
+              <label className="text-xs font-semibold text-slate-600 dark:text-slate-400 whitespace-nowrap flex-shrink-0">
+                운행일지 작성 시작일
+              </label>
+              <input
+                type="date"
+                value={startDate}
+                onChange={e => setStartDate(e.target.value)}
+                required
+                className="px-3 py-2 text-sm border border-slate-300 dark:border-slate-700 rounded-md bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-sky-500 outline-none"
+              />
+            </div>
+
+            <div className="flex flex-col gap-1">
+              <label className="text-xs font-semibold text-slate-600 dark:text-slate-400 whitespace-nowrap flex-shrink-0">
+                운행일지 작성 종료일
+              </label>
+              <input
+                type="date"
+                value={endDate}
+                onChange={e => setEndDate(e.target.value)}
+                required
+                className="px-3 py-2 text-sm border border-slate-300 dark:border-slate-700 rounded-md bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-sky-500 outline-none"
+              />
+            </div>
+
+            <div className="flex flex-col gap-1">
+              <label className="text-xs font-semibold text-slate-600 dark:text-slate-400 whitespace-nowrap flex-shrink-0">
+                시작 계기판 거리 (km)
+              </label>
+              <input
+                type="number"
+                value={initialOdometer}
+                onChange={e => setInitialOdometer(Number(e.target.value))}
+                required
+                min={0}
+                className="px-3 py-2 text-sm border border-slate-300 dark:border-slate-700 rounded-md bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-sky-500 outline-none text-right font-mono"
+              />
+            </div>
+
+            <div className="flex flex-col gap-1">
+              <label className="text-xs font-semibold text-slate-600 dark:text-slate-400 whitespace-nowrap flex-shrink-0">
+                종료 계기판 거리 (km)
+              </label>
+              <input
+                type="number"
+                value={finalOdometer}
+                onChange={e => setFinalOdometer(Number(e.target.value))}
+                required
+                min={initialOdometer}
+                className="px-3 py-2 text-sm border border-slate-300 dark:border-slate-700 rounded-md bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-sky-500 outline-none text-right font-mono"
+              />
+            </div>
+
+            <div className="flex flex-col gap-1">
+              <label className="text-xs font-semibold text-slate-600 dark:text-slate-400 whitespace-nowrap flex-shrink-0">
+                출퇴근용 주행거리 (km/일)
+              </label>
+              <input
+                type="number"
+                value={commuteDistance}
+                onChange={e => setCommuteDistance(Number(e.target.value))}
+                required
+                min={0}
+                className="px-3 py-2 text-sm border border-slate-300 dark:border-slate-700 rounded-md bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-sky-500 outline-none text-right font-mono"
+              />
+            </div>
+          </div>
+        </div>
+
+        <hr className="border-slate-200 dark:border-slate-800" />
+
+        {/* 3. 휴가일 및 명절/공휴일 지정 */}
+        <div>
+          <h3 className="text-sm font-semibold text-slate-700 dark:text-slate-300 mb-3 whitespace-nowrap">
+            3. 휴가일 및 명절/공휴일 설정 (차량 운행 0km 제어)
+          </h3>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            {/* 개인 휴가일 관리 */}
+            <div className="flex flex-col gap-2">
+              <label className="text-xs font-semibold text-slate-600 dark:text-slate-400 whitespace-nowrap flex-shrink-0">
+                개인 휴가일 추가
+              </label>
+              <div className="flex items-center gap-2">
+                <input
+                  type="date"
+                  value={vacationInput}
+                  onChange={e => setVacationInput(e.target.value)}
+                  className="px-3 py-1.5 text-sm border border-slate-300 dark:border-slate-700 rounded-md bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 flex-1 outline-none"
+                />
+                <button
+                  type="button"
+                  onClick={handleAddVacation}
+                  className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-white text-xs font-medium rounded-md flex items-center gap-1 whitespace-nowrap"
+                >
+                  <Plus className="w-4 h-4" />
+                  <span>추가</span>
+                </button>
+              </div>
+
+              <div className="flex flex-wrap gap-1.5 min-h-[40px] p-2 bg-slate-50 dark:bg-slate-800/50 rounded-md border border-slate-200 dark:border-slate-700">
+                {vacationDates.length === 0 ? (
+                  <span className="text-xs text-slate-400 self-center">지정된 휴가일이 없습니다.</span>
+                ) : (
+                  vacationDates.map(date => (
+                    <span
+                      key={date}
+                      className="inline-flex items-center gap-1 px-2.5 py-1 bg-amber-100 dark:bg-amber-950/60 text-amber-900 dark:text-amber-300 border border-amber-200 dark:border-amber-800 rounded-md text-xs font-mono whitespace-nowrap"
+                    >
+                      {date} (휴가)
+                      <button
+                        type="button"
+                        onClick={() => handleRemoveVacation(date)}
+                        className="hover:text-rose-600 ml-1"
+                      >
+                        <Trash2 className="w-3 h-3" />
+                      </button>
+                    </span>
+                  ))
+                )}
+              </div>
+            </div>
+
+            {/* 명절 및 법정공휴일/임시공휴일 관리 */}
+            <div className="flex flex-col gap-2">
+              <div className="flex items-center justify-between">
+                <label className="text-xs font-semibold text-slate-600 dark:text-slate-400 whitespace-nowrap flex-shrink-0">
+                  명절 및 법정공휴일/임시공휴일
+                </label>
+                <button
+                  type="button"
+                  onClick={handleLoadDefaultHolidays}
+                  className="text-xs text-sky-600 hover:text-sky-700 font-medium flex items-center gap-1 whitespace-nowrap"
+                >
+                  <RefreshCw className="w-3 h-3" />
+                  <span>법정공휴일 자동 불러오기</span>
+                </button>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <input
+                  type="date"
+                  value={holidayInput}
+                  onChange={e => setHolidayInput(e.target.value)}
+                  className="px-3 py-1.5 text-sm border border-slate-300 dark:border-slate-700 rounded-md bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 flex-1 outline-none"
+                />
+                <button
+                  type="button"
+                  onClick={handleAddHoliday}
+                  className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-white text-xs font-medium rounded-md flex items-center gap-1 whitespace-nowrap"
+                >
+                  <Plus className="w-4 h-4" />
+                  <span>추가</span>
+                </button>
+              </div>
+
+              <div className="flex flex-wrap gap-1.5 max-h-[120px] overflow-y-auto p-2 bg-slate-50 dark:bg-slate-800/50 rounded-md border border-slate-200 dark:border-slate-700">
+                {customHolidays.length === 0 ? (
+                  <span className="text-xs text-slate-400 self-center">지정된 공휴일이 없습니다.</span>
+                ) : (
+                  customHolidays.map(date => (
+                    <span
+                      key={date}
+                      className="inline-flex items-center gap-1 px-2 py-0.5 bg-rose-100 dark:bg-rose-950/60 text-rose-900 dark:text-rose-300 border border-rose-200 dark:border-rose-800 rounded-md text-xs font-mono whitespace-nowrap"
+                    >
+                      {date}
+                      <button
+                        type="button"
+                        onClick={() => handleRemoveHoliday(date)}
+                        className="hover:text-rose-600 ml-1"
+                      >
+                        <Trash2 className="w-3 h-3" />
+                      </button>
+                    </span>
+                  ))
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* 4. 실행 버튼 영역 */}
+        <div className="pt-4 border-t border-slate-200 dark:border-slate-800 flex items-center justify-end gap-3">
+          <button
+            type="submit"
+            disabled={isGenerating}
+            className="px-6 py-2.5 bg-sky-600 hover:bg-sky-700 text-white font-semibold text-sm rounded-lg shadow-sm flex items-center gap-2 transition-all disabled:opacity-50 whitespace-nowrap"
+          >
+            <FileText className="w-4 h-4" />
+            <span>{isGenerating ? '일지 생성 중...' : '작성'}</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={onDownloadExcel}
+            disabled={!hasGeneratedData || isDownloading}
+            className="px-6 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-sm rounded-lg shadow-sm flex items-center gap-2 transition-all disabled:opacity-40 disabled:cursor-not-allowed whitespace-nowrap"
+          >
+            <Download className="w-4 h-4" />
+            <span>{isDownloading ? '엑셀 생성 중...' : '내려받기'}</span>
+          </button>
+        </div>
+      </div>
+    </form>
+  );
+};
