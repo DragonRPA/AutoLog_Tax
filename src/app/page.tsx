@@ -158,7 +158,7 @@ export default function Home() {
 
       <footer className="border-t border-slate-200 dark:border-slate-800 py-4 bg-white dark:bg-slate-900 text-center text-xs text-slate-500">
         <p className="whitespace-nowrap">
-          © 2026 (주)이렌컴 법인차량 운행일지 자동작성 서비스 | 국세청 표준 양식 완전 호환
+          © 2026 (주)드래곤알피에이. All rights reserved. | 국세청 표준 양식 완전 호환
         </p>
       </footer>
 
