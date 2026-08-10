@@ -1,5 +1,12 @@
 # 🚀 RELEASE_NOTES.md - 릴리즈 노트
 
+## [v1.0.0.Build.2] - 2026-08-10 11:06
+### 🛠️ GitHub Pages 자동 배포 지원
+- **GitHub Pages 404 해결**:
+  - `next.config.mjs` 내 static export (`output: 'export'`) 및 `basePath: '/AutoLog_Tax'` 동적 경로 설정
+  - `.github/workflows/deploy.yml` GitHub Actions 자동 배포 워크플로우 추가
+  - `main` 브랜치 푸시 시 `https://dragonrpa.github.io/AutoLog_Tax/`에 정적 웹사이트 자동 호스팅
+
 ## [v1.0.0.Build.1] - 2026-08-10 10:51
 ### 🌟 최초 릴리즈 (Initial Release)
 - **국세청 표준 업무용승용차 운행기록부 자동작성 서비스 신규 구축**
@@ -15,7 +22,3 @@
 - **엑셀 내려받기 엔진 (`exceljs`)**:
   - 국세청 표준 서식 100% 동일 레이아웃 (헤더, 기본정보, 표 테두리, 수식, 노란색 하이라이트 셀 12번/13번) 구현
   - 엑셀 파일 내 작성 기간 월별 시트 (`YYYY년MM월`) 자동 구성
-- **전사 시스템 개발 표준 헌장 준수**:
-  - 레이블-입력창 상하 세로 스택 컨셉 적용
-  - 테이블 셀/레이블 줄바꿈 방지 (`white-space: nowrap`)
-  - 무음 실패 방지 모달 시스템 탑재
