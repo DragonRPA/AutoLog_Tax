@@ -82,6 +82,7 @@ export function generateAutoLogbook(input: LogbookInput): AutoLogResult {
   // 날짜 구획 분류 (휴무일 / 특수일정 / 일반평일)
   const normalWorkdays: string[] = [];
   const holidayReasons: Record<string, string> = {};
+  const monthlyNormalWorkdays: Record<string, string[]> = {};
 
   allDateStrs.forEach(dateStr => {
     const reason = getHolidayReason(dateStr, vacationDates, customHolidays, holidayNames);
@@ -89,23 +90,83 @@ export function generateAutoLogbook(input: LogbookInput): AutoLogResult {
       holidayReasons[dateStr] = reason;
     } else if (!specialMap[dateStr]) {
       normalWorkdays.push(dateStr);
+
+      // 월별 그룹화 (YYYY년MM월)
+      const dObj = parseISO(dateStr);
+      const mKey = `${getYear(dObj)}년${String(getMonth(dObj) + 1).padStart(2, '0')}월`;
+      if (!monthlyNormalWorkdays[mKey]) {
+        monthlyNormalWorkdays[mKey] = [];
+      }
+      monthlyNormalWorkdays[mKey].push(dateStr);
     }
   });
 
   const normalWorkdayCount = normalWorkdays.length;
   const normalTargetDistance = totalRequiredDistance - totalSpecialDistance;
 
-  // 일반 평일 난수 분배 (광범위 난수 가중치 및 최소/최대 제어)
-  const dailyTotalList: Record<string, number> = {};
+  // =========================================================================
+  // [사용자 알고리즘 요구사항 1]: 출퇴근 거리 월별 60% 엄격 준수, 40% ±15% 무작위 증감
+  // =========================================================================
+  const baseCommute = Math.max(0, commuteDistance);
+  const dailyCommuteList: Record<string, number> = {};
 
-  if (normalWorkdayCount > 0) {
+  Object.entries(monthlyNormalWorkdays).forEach(([mKey, monthDays]) => {
+    const totalDaysInMonth = monthDays.length;
+    if (totalDaysInMonth === 0) return;
+
+    // 60%는 엄격 준수일수, 40%는 가변일수
+    const strictCount = Math.round(totalDaysInMonth * 0.6);
+    
+    // 시드 기반 일수 셔플하여 60% 준수일과 40% 가변일 고르게 선정
+    const indexedDays = monthDays.map((dateStr, idx) => {
+      const pseudoRand = Math.abs(Math.sin((idx + 1) * 7919 + totalDaysInMonth));
+      return { dateStr, pseudoRand };
+    });
+
+    // 난수 기준 정렬
+    indexedDays.sort((a, b) => a.pseudoRand - b.pseudoRand);
+
+    indexedDays.forEach((item, idx) => {
+      if (idx < strictCount) {
+        // 60% 근무일: 기준 출퇴근거리 100% 엄격 준수
+        dailyCommuteList[item.dateStr] = baseCommute;
+      } else {
+        // 40% 근무일: 기준 출퇴근거리의 ±15% 범위 내 무작위 증감 (0.85 ~ 1.15)
+        const randVariance = (Math.abs(Math.sin(idx * 31337 + 101)) * 0.3) - 0.15; // -0.15 ~ +0.15
+        const variedCommute = Math.max(0, Math.round(baseCommute * (1 + randVariance)));
+        dailyCommuteList[item.dateStr] = variedCommute;
+      }
+    });
+  });
+
+  // 전체 출퇴근 주행거리 합계 계산
+  let totalCommuteSum = normalWorkdays.reduce((sum, d) => sum + (dailyCommuteList[d] || 0), 0);
+
+  // 출퇴근 주행거리 합계가 평일 전체 목표 주행거리를 초과 시 비례 조정하여 우선 확보
+  if (totalCommuteSum > normalTargetDistance && totalCommuteSum > 0) {
+    const scale = normalTargetDistance / totalCommuteSum;
+    totalCommuteSum = 0;
+    normalWorkdays.forEach(d => {
+      dailyCommuteList[d] = Math.floor((dailyCommuteList[d] || 0) * scale);
+      totalCommuteSum += dailyCommuteList[d];
+    });
+  }
+
+  // =========================================================================
+  // [사용자 알고리즘 요구사항 2]: 출퇴근 주행을 먼저 확보 후 잔여 주행거리를 무작위 배분
+  // =========================================================================
+  const remainingBusinessTarget = Math.max(0, normalTargetDistance - totalCommuteSum);
+  const dailyBusinessList: Record<string, number> = {};
+
+  if (normalWorkdayCount > 0 && remainingBusinessTarget > 0) {
     const userMin = minDailyDistance !== undefined && !isNaN(minDailyDistance) ? Math.max(0, minDailyDistance) : 0;
     const userMax = maxDailyDistance !== undefined && !isNaN(maxDailyDistance) && maxDailyDistance > 0
       ? maxDailyDistance
-      : Math.ceil(normalTargetDistance / Math.max(1, normalWorkdayCount) * 2.5);
+      : Math.ceil(remainingBusinessTarget / Math.max(1, normalWorkdayCount) * 3.0);
 
+    // 잔여 업무거리에 대한 광범위 무작위 파동 가중치 생성
     const rawWeights: number[] = normalWorkdays.map((dateStr, idx) => {
-      const seed1 = Math.abs(Math.sin((idx + 1) * 31337 + normalTargetDistance));
+      const seed1 = Math.abs(Math.sin((idx + 1) * 31337 + remainingBusinessTarget));
       const seed2 = Math.abs(Math.cos((idx + 1) * 7919));
       const wideVariance = Math.pow(seed1, 2.5) * 3.5 + seed2 * 0.5;
       return Math.max(0.1, wideVariance);
@@ -116,23 +177,22 @@ export function generateAutoLogbook(input: LogbookInput): AutoLogResult {
 
     normalWorkdays.forEach((dateStr, idx) => {
       if (idx === normalWorkdayCount - 1) {
-        let finalVal = normalTargetDistance - allocatedSum;
+        // 마지막 날 단수 차이 보정하여 잔여 주행거리 100% 정밀 일치
+        let finalVal = remainingBusinessTarget - allocatedSum;
         if (finalVal < 0) finalVal = 0;
-        dailyTotalList[dateStr] = finalVal;
+        dailyBusinessList[dateStr] = finalVal;
       } else {
-        let calculated = Math.floor((normalTargetDistance * rawWeights[idx]) / totalWeight);
+        let calculated = Math.floor((remainingBusinessTarget * rawWeights[idx]) / totalWeight);
         if (userMin > 0) calculated = Math.max(userMin, calculated);
         if (userMax > 0) calculated = Math.min(userMax, calculated);
 
-        dailyTotalList[dateStr] = calculated;
+        dailyBusinessList[dateStr] = calculated;
         allocatedSum += calculated;
       }
     });
-  } else if (normalTargetDistance > 0 && totalSpecialDistance === 0) {
-    throw new Error('운행이 가능한 평일이 없습니다. 작성 기간 또는 휴가/공휴일 설정을 확인해주세요.');
   }
 
-  // 일별 계기판 연속 누적 생성
+  // 일별 계기판 연속 누적 및 운행일지 엔트리 생성
   let currentOdometer = initialOdometer;
   const entries: DailyLogEntry[] = [];
 
@@ -159,17 +219,10 @@ export function generateAutoLogbook(input: LogbookInput): AutoLogResult {
       total = spec.distance;
       remarks = spec.remarks || '특수 장거리 출장';
     } else {
-      // 일반 평일: 총 주행거리에서 출퇴근거리를 차감한 잔여거리가 ⑨ 일반 업무용 거리
-      total = dailyTotalList[dateStr] || 0;
-      const baseCommute = Math.max(0, commuteDistance);
-
-      if (total >= baseCommute) {
-        commute = baseCommute;
-        business = total - baseCommute; // ⑨ 잔여 일반 업무용 거리
-      } else {
-        commute = total;
-        business = 0;
-      }
+      // 일반 평일: 출퇴근 거리 우선 확보 후 잔여 거리가 ⑨ 일반 업무용 거리
+      commute = dailyCommuteList[dateStr] || 0;
+      business = dailyBusinessList[dateStr] || 0;
+      total = commute + business;
 
       remarks = business > 0 ? '업무 출장 및 방문' : (commute > 0 ? '출퇴근' : '운행 없음');
     }
@@ -210,12 +263,11 @@ export function generateAutoLogbook(input: LogbookInput): AutoLogResult {
     monthlyMap[sheetKey].push(entry);
   });
 
-  // [사용자 요구사항 반영]:
   // ⑪ 과세기간 총주행 거리 = sum(⑦ 총 주행거리)
-  // ⑫ 과세기간 업무용 사용거리 = sum(⑨ 잔여 일반 업무용 거리) [출퇴근 거리 ⑧ 차감 후 잔여 거리]
+  // ⑫ 과세기간 업무용 사용거리 = sum(⑨ 잔여 일반 업무용 거리) [출퇴근 주행거리 제외 잔여 업무거리]
   // ⑬ 업무사용비율 = (⑫ / ⑪) * 100%
   const overallTotalDistance = entries.reduce((sum, e) => sum + e.totalDistance, 0);
-  const overallBusinessDistance = entries.reduce((sum, e) => sum + e.businessDistance, 0); // ⑨ 일반 업무용만 합산!
+  const overallBusinessDistance = entries.reduce((sum, e) => sum + e.businessDistance, 0);
   const overallBusinessRatio =
     overallTotalDistance > 0 ? (overallBusinessDistance / overallTotalDistance) * 100 : 0.0;
 
@@ -226,7 +278,7 @@ export function generateAutoLogbook(input: LogbookInput): AutoLogResult {
       const month = getMonth(dateObj) + 1;
 
       const totalPeriodDistance = monthEntries.reduce((sum, e) => sum + e.totalDistance, 0);
-      const totalBusinessDistance = monthEntries.reduce((sum, e) => sum + e.businessDistance, 0); // ⑨ 일반 업무용만 합산!
+      const totalBusinessDistance = monthEntries.reduce((sum, e) => sum + e.businessDistance, 0);
       const businessRatio =
         totalPeriodDistance > 0
           ? (totalBusinessDistance / totalPeriodDistance) * 100
